@@ -1,0 +1,5 @@
+FROM scratch
+WORKDIR /bin/app
+COPY ./* /bin/app
+ENTRYPOINT ["./app"]
+CMD ["--help"]

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    {{if .MobileCompatible}}
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    {{end}}
+    <title>{{.PageTitle}}</title>
+    <link rel="stylesheet" href="/static/bootstrap/css/bootstrap.css">
+    <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="/static/css/navbar.css">
+    <link rel="stylesheet" href="/static/fontawesome-free-5.9.0-web/css/all.css">
+</head>
+<body>
+<div class="nav">
+    <div style="display:flex;align-items:center;">
+        <div class="brand"><a href="/">{{.WebsiteName}}</a></div>
+        <div class="toggle">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+    </div>
+    <ul class="menu">
+        {{if .User}}
+        <li class="menu-item">
+            <a href="/user/{{.User.Id}}/article"> {{.User.Name}}</a>
+            <ul class="sub-menu">
+                <li class="sub-menu-item">
+                    <a href="/categories">分类</a>
+                </li>
+                <li class="sub-menu-item">
+                    <a href="/profile">设置</a>
+                </li>
+                <li class="sub-menu-item">
+                    <form id="logoutForm" method="post" action="/logout">
+                        <a href="javascript:;;" onclick="document.getElementById('logoutForm').submit()">注销</a>
+                    </form>
+                </li>
+            </ul>
+        </li>
+        {{else}}
+        <li class="menu-item">
+            <a href="/login">登录</a>
+        </li>
+        {{end}}
+
+        <li class="menu-item">
+            <a href="/articleedit">写文章</a>
+        </li>
+    </ul>
+</div>
+<div class="page-content">
+    {{block "content" .Data}}
+   <div class="text-center">Empty page</div> 
+    {{end}}
+</div>
+<div class="footer" style="padding:25px 0;text-align: center;background-color: #282828;color:white;margin-top: 20px;position: absolute;bottom: 0;width:100%;">
+    <div>
+        <a href="mailto:flwwd@outlook.com" class="text-white mr-2">邮件</a>
+        <a target="_blank" href="//shang.qq.com/wpa/qunwpa?idkey=c1df04c3dfff80be7318eb0e09299f1cb2d78880fa787863ed192fab844ce16f" class="text-white mr-2">群</a>
+    </div>
+    <div style="color: #73777a;font-size: 14px;">
+        <div><span class="mr-2">建议使用chrome浏览器以获得最佳体验</span></div>
+        <div><span>Copyright © 2019 {{.WebsiteName}} All Rights Reserved</span></div>
+    </div>
+</div>
+<div id="mask" class="d-none">
+    <div class="d-flex justify-content-center align-items-center">
+        <div class="spinner-border text-light" role="status">
+            <span class="sr-only">Loading...</span>
+        </div>
+    </div>
+</div>
+<script src="/static/js/jquery-3.4.1.min.js"></script>
+<script src="/static/js/navbar.js"></script>
+<script src="/static/js/main.js"></script>
+<script src="/static/bootstrap/js/bootstrap.min.js"></script>
+<script src="/static/jquery-validation-1.19.0/dist/jquery.validate.js"></script>
+<script src="/static/js/jquery.form.min.js"></script>
+{{block "scripts" .}}
+{{end}}
+</body>
+</html>
