@@ -5,5 +5,17 @@ services:
 
 before_install:
   - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+  - sudo apt-get install sshpass
 script:
   - ./docker/build.sh
+deploy:
+  provider: script
+  script: bash scripts/deploy.sh
+  on:
+    branch: master
+env:
+  matrix:
+    - SSH_CMMAND=$SSH_DEPLOY
+      SSH_DEPLOY_PASSWORD=$SSH_DEPLOY_PASSWORD
+  global:
+    - IMAGE_TAG=mydocker3013/idp:$TRAVIS_COMMIT
