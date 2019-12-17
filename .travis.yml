@@ -15,7 +15,7 @@ deploy:
     branch: master
 env:
   matrix:
-    - SSH_CMMAND='$SSH_DEPLOY'
-      SSH_DEPLOY_PASSWORD='$SSH_DEPLOY_PASSWORD'
+    - SSH_CMMAND="$SSH_DEPLOY"
+      SSH_DEPLOY_PASSWORD="$SSH_DEPLOY_PASSWORD"
   global:
     - IMAGE_TAG=mydocker3013/idp:$TRAVIS_COMMIT
