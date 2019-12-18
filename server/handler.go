@@ -217,7 +217,7 @@ func Serve() {
 
 		})
 	})
-	fmt.Println("accepting tcp connections on http://" + global.Config.LISTEN_ADDRESS)
+	global.InfoLogger.Println("accepting tcp connections on http://" + global.Config.LISTEN_ADDRESS)
 	server := http.Server{
 		Addr:    global.Config.LISTEN_ADDRESS,
 		Handler: g,
