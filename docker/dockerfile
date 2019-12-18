@@ -1,6 +1,6 @@
 FROM scratch
 RUN apk add bash
 WORKDIR /bin/app/
-COPY ./* /bin/app/
+COPY . .
 ENTRYPOINT ["./app"]
 CMD ["--help"]
