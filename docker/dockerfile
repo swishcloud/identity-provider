@@ -1,4 +1,5 @@
 FROM scratch
+RUN apk add bash
 WORKDIR /bin/app/
 COPY ./* /bin/app/
 ENTRYPOINT ["./app"]
