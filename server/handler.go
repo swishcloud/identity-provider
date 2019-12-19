@@ -34,12 +34,13 @@ const (
 	sessions_logout_path = "/oauth2/sessions/logout"
 )
 
-var store storage.Storage = storage.NewSQLManager()
+var store storage.Storage
 
 func onError(ctx *goweb.Context, err error) {
 	panic(err)
 }
 func Serve() {
+	store = storage.NewSQLManager()
 	g := goweb.Default()
 	privileged_g := g.Group()
 	privileged_g.Use(introspectTokenMiddleware)
