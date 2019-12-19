@@ -3,13 +3,9 @@ package global
 import (
 	"bytes"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
-
-	"gopkg.in/yaml.v2"
 )
 
 var Config config
@@ -24,24 +20,8 @@ type config struct {
 	DB_CONN_INFO      string `yaml:"db_conn_info"`
 }
 
-const (
-	IDENTITY_PROVIDER_CONFIG = "IDENTITY_PROVIDER_CONFIG"
-)
-
 func init() {
-	if path, ok := os.LookupEnv(IDENTITY_PROVIDER_CONFIG); ok {
-		b, err := ioutil.ReadFile(path)
-		if err != nil {
-			panic(err)
-		}
-		err = yaml.Unmarshal(b, &Config)
-		if err != nil {
-			panic(err)
-		}
-	} else {
-		log.Fatal("missing required environment variable " + IDENTITY_PROVIDER_CONFIG)
-	}
-	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile | log.LUTC)
+
 }
 
 func GetUriString(host string, path string, urlParameters url.Values) string {

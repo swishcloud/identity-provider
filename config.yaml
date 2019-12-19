@@ -4,4 +4,4 @@ is_https: false
 listen_address: "127.0.0.1:11109"
 website_name: "IDP"
 secret: "IDENTITY_PROVIDER_SECRET"
-db_conn_info: "postgres://hydra:secret@192.168.100.8:5420/idp?sslmode=disable"
+db_conn_info: "postgres://hydra:secret@127.0.0.1:5420/idp?sslmode=disable"
