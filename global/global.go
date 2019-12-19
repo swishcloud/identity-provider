@@ -9,16 +9,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/swishcloud/gostudy/logger"
-
 	"gopkg.in/yaml.v2"
 )
 
 var Config config
-
-var InfoLogger *log.Logger
-
-var ErrorLogger *log.Logger
 
 type config struct {
 	HYDRA_ADMIN_HOST  string `yaml:"hydra_admin_host"`
@@ -47,9 +41,7 @@ func init() {
 	} else {
 		log.Fatal("missing required environment variable " + IDENTITY_PROVIDER_CONFIG)
 	}
-
-	InfoLogger = logger.NewFileLogger("log", Config.WEBSITE_NAME+" INFO")
-	ErrorLogger = logger.NewFileLogger("log", Config.WEBSITE_NAME+" Error")
+	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile | log.LUTC)
 }
 
 func GetUriString(host string, path string, urlParameters url.Values) string {

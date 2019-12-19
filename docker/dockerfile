@@ -1,4 +1,4 @@
-FROM scratch
+FROM alpine:3.7
 WORKDIR /bin/app/
 COPY . .
 ENTRYPOINT ["./app"]
