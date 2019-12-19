@@ -212,7 +212,7 @@ func Serve() {
 		auth.Logout(ctx, func(id_token string) {
 			parameters := url.Values{}
 			parameters.Add("id_token_hint", id_token)
-			redirect_url := global.GetUriString(global.Config.LISTEN_ADDRESS, "/login", nil)
+			redirect_url := global.Config.Post_Logout_Redirect_Uri
 			parameters.Add("post_logout_redirect_uri", redirect_url)
 			http.Redirect(ctx.Writer, ctx.Request, global.GetUriString(global.Config.HYDRA_PUBLIC_HOST, sessions_logout_path, parameters), 302)
 

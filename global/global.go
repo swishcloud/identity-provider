@@ -11,13 +11,14 @@ import (
 var Config config
 
 type config struct {
-	HYDRA_ADMIN_HOST  string `yaml:"hydra_admin_host"`
-	HYDRA_PUBLIC_HOST string `yaml:"hydra_public_host"`
-	IS_HTTPS          bool   `yaml:"is_https"`
-	LISTEN_ADDRESS    string `yaml:"listen_address"`
-	WEBSITE_NAME      string `yaml:"website_name"`
-	SECRET            string `yaml:"secret"`
-	DB_CONN_INFO      string `yaml:"db_conn_info"`
+	HYDRA_ADMIN_HOST         string `yaml:"hydra_admin_host"`
+	HYDRA_PUBLIC_HOST        string `yaml:"hydra_public_host"`
+	IS_HTTPS                 bool   `yaml:"is_https"`
+	LISTEN_ADDRESS           string `yaml:"listen_address"`
+	WEBSITE_NAME             string `yaml:"website_name"`
+	SECRET                   string `yaml:"secret"`
+	DB_CONN_INFO             string `yaml:"db_conn_info"`
+	Post_Logout_Redirect_Uri string `yaml:"post_logout_redirect_uri"`
 }
 
 func init() {
