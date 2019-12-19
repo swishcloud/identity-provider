@@ -50,3 +50,5 @@ docker run \
   -e URLS_LOGOUT=$IdentityProviderAddr/logout \
   -e URLS_POST_LOGOUT_REDIRECT=$IdentityProviderAddr/ \
   oryd/hydra:v1.0.8 serve all --dangerous-force-http
+  #migrate idp database
+  docker run --rm dev migrate sql --conn_info=$HydraDSN

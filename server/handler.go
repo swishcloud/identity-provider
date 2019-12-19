@@ -94,8 +94,8 @@ func Serve() {
 		ClientSecret: global.Config.SECRET,
 		Scopes:       []string{"offline", "openid", "profile"},
 		Endpoint: oauth2.Endpoint{
-			AuthURL:  "http://" + global.Config.HYDRA_PUBLIC_HOST + "/oauth2/auth",
-			TokenURL: "http://" + global.Config.HYDRA_PUBLIC_HOST + "/oauth2/token",
+			AuthURL:  global.GetUriString(global.Config.HYDRA_PUBLIC_HOST, "/oauth2/auth", nil),
+			TokenURL: global.GetUriString(global.Config.HYDRA_PUBLIC_HOST, "/oauth2/token", nil),
 		},
 	}
 	g.GET("/register", func(ctx *goweb.Context) {
