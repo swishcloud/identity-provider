@@ -25,13 +25,13 @@ import (
 )
 
 const (
-	LoginPath            = "/oauth2/auth/requests/login"
-	ConsentPath          = "/oauth2/auth/requests/consent"
-	LogoutPath           = "/oauth2/auth/requests/logout"
-	SessionsPath         = "/oauth2/auth/sessions"
-	IntrospectPath       = "/oauth2/introspect"
-	jwk_json_path        = "/.well-known/jwks.json"
-	sessions_logout_path = "/oauth2/sessions/logout"
+	LoginPath            = "/op/oauth2/auth/requests/login"
+	ConsentPath          = "/op/oauth2/auth/requests/consent"
+	LogoutPath           = "/op/oauth2/auth/requests/logout"
+	SessionsPath         = "/op/oauth2/auth/sessions"
+	IntrospectPath       = "/op/oauth2/introspect"
+	jwk_json_path        = "/op/.well-known/jwks.json"
+	sessions_logout_path = "/op/oauth2/sessions/logout"
 )
 
 var store storage.Storage
@@ -57,7 +57,7 @@ func Serve() {
 		consent_challenge := ctx.Request.URL.Query().Get("consent_challenge")
 		parameters := url.Values{}
 		parameters.Add("consent_challenge", consent_challenge)
-		b := global.SendRestApiRequest("GET", global.GetUriString(global.Config.HYDRA_ADMIN_HOST, ConsentPath, parameters), nil)
+		b := global.SendRestApiRequest("GET", global.GetUriString(global.Config.HYDRA_HOST, global.Config.HYDRA_ADMIN_PORT, ConsentPath, parameters), nil)
 		res := HydraConsentRes{}
 		json.Unmarshal(b, &res)
 
@@ -73,7 +73,7 @@ func Serve() {
 		if err != nil {
 			panic(err)
 		}
-		putRes := global.SendRestApiRequest("PUT", global.GetUriString(global.Config.HYDRA_ADMIN_HOST, ConsentPath+"/accept", parameters), b)
+		putRes := global.SendRestApiRequest("PUT", global.GetUriString(global.Config.HYDRA_HOST, global.Config.HYDRA_ADMIN_PORT, ConsentPath+"/accept", parameters), b)
 		consentAcceptRes := HydraConsentAcceptRes{}
 		err = json.Unmarshal(putRes, &consentAcceptRes)
 		if err != nil {
@@ -94,8 +94,8 @@ func Serve() {
 		ClientSecret: global.Config.SECRET,
 		Scopes:       []string{"offline", "openid", "profile"},
 		Endpoint: oauth2.Endpoint{
-			AuthURL:  global.GetUriString(global.Config.HYDRA_PUBLIC_HOST, "/oauth2/auth", nil),
-			TokenURL: global.GetUriString(global.Config.HYDRA_PUBLIC_HOST, "/oauth2/token", nil),
+			AuthURL:  global.GetUriString(global.Config.HYDRA_HOST, global.Config.HYDRA_PUBLIC_PORT, "/op/oauth2/auth", nil),
+			TokenURL: global.GetUriString(global.Config.HYDRA_HOST, global.Config.HYDRA_PUBLIC_PORT, "/op/oauth2/token", nil),
 		},
 	}
 	g.GET("/register", func(ctx *goweb.Context) {
@@ -126,7 +126,7 @@ func Serve() {
 			parameters := url.Values{}
 			parameters.Add("login_challenge", login_challenge)
 
-			b := global.SendRestApiRequest("GET", global.GetUriString(global.Config.HYDRA_ADMIN_HOST, LoginPath, parameters), nil)
+			b := global.SendRestApiRequest("GET", global.GetUriString(global.Config.HYDRA_HOST, global.Config.HYDRA_ADMIN_PORT, LoginPath, parameters), nil)
 			loginRes := HydraLoginRes{}
 			err := json.Unmarshal(b, &loginRes)
 			if err != nil {
@@ -166,7 +166,7 @@ func Serve() {
 			ctx.Writer.Write([]byte(err.Error()))
 			return
 		}
-		auth.Login(ctx, token, global.GetUriString(global.Config.HYDRA_PUBLIC_HOST, jwk_json_path, nil))
+		auth.Login(ctx, token, global.GetUriString(global.Config.HYDRA_HOST, global.Config.HYDRA_PUBLIC_PORT, jwk_json_path, nil))
 		client := conf.Client(context.Background(), token)
 		token.SetAuthHeader(ctx.Request)
 		resp, err := client.Get("http://" + global.Config.LISTEN_ADDRESS + "/user_info")
@@ -189,13 +189,13 @@ func Serve() {
 		parameters := url.Values{}
 		parameters.Add("logout_challenge", logout_challenge)
 
-		b := global.SendRestApiRequest("GET", global.GetUriString(global.Config.HYDRA_ADMIN_HOST, LogoutPath, parameters), nil)
+		b := global.SendRestApiRequest("GET", global.GetUriString(global.Config.HYDRA_HOST, global.Config.HYDRA_ADMIN_PORT, LogoutPath, parameters), nil)
 		information := hydraLogoutRequestInformation{}
 		err := json.Unmarshal(b, &information)
 		if err != nil {
 			panic(err)
 		}
-		putRes := global.SendRestApiRequest("PUT", global.GetUriString(global.Config.HYDRA_ADMIN_HOST, LogoutPath+"/accept", parameters), nil)
+		putRes := global.SendRestApiRequest("PUT", global.GetUriString(global.Config.HYDRA_HOST, global.Config.HYDRA_ADMIN_PORT, LogoutPath+"/accept", parameters), nil)
 		logoutAcceptRes := HydraLogoutAcceptRes{}
 		err = json.Unmarshal(putRes, &logoutAcceptRes)
 		if err != nil {
@@ -214,7 +214,7 @@ func Serve() {
 			parameters.Add("id_token_hint", id_token)
 			redirect_url := global.Config.Post_Logout_Redirect_Uri
 			parameters.Add("post_logout_redirect_uri", redirect_url)
-			http.Redirect(ctx.Writer, ctx.Request, global.GetUriString(global.Config.HYDRA_PUBLIC_HOST, sessions_logout_path, parameters), 302)
+			http.Redirect(ctx.Writer, ctx.Request, global.GetUriString(global.Config.HYDRA_HOST, global.Config.HYDRA_PUBLIC_PORT, sessions_logout_path, parameters), 302)
 
 		})
 	})
@@ -248,7 +248,7 @@ func introspectTokenMiddleware(ctx *goweb.Context) {
 	parameters := url.Values{}
 	parameters.Add("token", tokenStrs[1])
 	parameters.Add("scope", "profile")
-	b := global.SendRestApiRequest("POST", global.GetUriString(global.Config.HYDRA_ADMIN_HOST, IntrospectPath, parameters), nil)
+	b := global.SendRestApiRequest("POST", global.GetUriString(global.Config.HYDRA_HOST, global.Config.HYDRA_ADMIN_PORT, IntrospectPath, parameters), nil)
 	m := map[string]interface{}{}
 	err := json.Unmarshal(b, &m)
 	if err != nil {
@@ -269,7 +269,7 @@ func AcceptLogin(ctx *goweb.Context, login_challenge string, user models.User) {
 	b, err := json.Marshal(body)
 	parameters := url.Values{}
 	parameters.Add("login_challenge", login_challenge)
-	putRes := global.SendRestApiRequest("PUT", global.GetUriString(global.Config.HYDRA_ADMIN_HOST, LoginPath+"/accept", parameters), b)
+	putRes := global.SendRestApiRequest("PUT", global.GetUriString(global.Config.HYDRA_HOST, global.Config.HYDRA_ADMIN_PORT, LoginPath+"/accept", parameters), b)
 	loginAcceptRes := HydraLoginAcceptRes{}
 	fmt.Println(string(putRes))
 	json.Unmarshal(putRes, &loginAcceptRes)

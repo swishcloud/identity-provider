@@ -1,5 +1,6 @@
-hydra_public_host: "127.0.0.1:8010"
-hydra_admin_host: "127.0.0.1:8009"
+hydra_host: "127.0.0.1"
+hydra_public_port: 8010
+hydra_admin_port: 8011
 is_https: false
 listen_address: "127.0.0.1:11109"
 website_name: "IDP"

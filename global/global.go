@@ -3,6 +3,7 @@ package global
 import (
 	"bytes"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -11,8 +12,9 @@ import (
 var Config config
 
 type config struct {
-	HYDRA_ADMIN_HOST         string `yaml:"hydra_admin_host"`
-	HYDRA_PUBLIC_HOST        string `yaml:"hydra_public_host"`
+	HYDRA_HOST               string `yaml:"hydra_host"`
+	HYDRA_PUBLIC_PORT        string `yaml:"hydra_public_port"`
+	HYDRA_ADMIN_PORT         string `yaml:"hydra_admin_port"`
 	IS_HTTPS                 bool   `yaml:"is_https"`
 	LISTEN_ADDRESS           string `yaml:"listen_address"`
 	WEBSITE_NAME             string `yaml:"website_name"`
@@ -25,7 +27,7 @@ func init() {
 
 }
 
-func GetUriString(host string, path string, urlParameters url.Values) string {
+func GetUriString(host, port string, path string, urlParameters url.Values) string {
 	var scheme string
 	if Config.IS_HTTPS {
 		scheme = "https"
@@ -39,7 +41,7 @@ func GetUriString(host string, path string, urlParameters url.Values) string {
 			path = path + "&"
 		}
 	}
-	return scheme + "://" + host + path + urlParameters.Encode()
+	return scheme + "://" + net.JoinHostPort(host, port) + path + urlParameters.Encode()
 }
 
 func SendRestApiRequest(method string, urlPath string, body []byte) []byte {
