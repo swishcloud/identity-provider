@@ -5,5 +5,5 @@ type User struct {
 	Name     string
 	Email    string
 	Password string
-	Avatar   string
+	Avatar   *string
 }
