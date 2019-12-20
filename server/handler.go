@@ -68,7 +68,7 @@ func Serve() {
 		body.Grant_scope = res.Requested_scope
 		body.Remember = true
 		body.Remember_for = 60 * 30
-		body.Session = HydraConsentAcceptBodySession{Id_token: map[string]interface{}{"name": user.Name, "avatar": user.Avatar}}
+		body.Session = HydraConsentAcceptBodySession{Id_token: map[string]interface{}{"name": user.Name, "avatar": user.Avatar, "email": user.Email}}
 		b, err := json.Marshal(body)
 		if err != nil {
 			panic(err)

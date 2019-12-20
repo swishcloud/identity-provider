@@ -34,16 +34,16 @@ func (m *SQLManager) GetUsers() {
 }
 
 func (m *SQLManager) GetUserByName(name string) *models.User {
-	r := m.DB.QueryRow("select id,name,password from public.\"user\" where name=$1", name)
+	r := m.DB.QueryRow("select id,name,email,password,avatar from public.\"user\" where name=$1", name)
 	return getUser(r)
 }
 func (m *SQLManager) GetUserById(id string) *models.User {
-	r := m.DB.QueryRow("select id,name,password from public.\"user\" where id=$1", id)
+	r := m.DB.QueryRow("select id,name,email,password,avatar from public.\"user\" where id=$1", id)
 	return getUser(r)
 }
 func getUser(r *sql.Row) *models.User {
 	user := models.User{}
-	err := r.Scan(&user.Id, &user.Name, &user.Password)
+	err := r.Scan(&user.Id, &user.Name, &user.Email, &user.Password, &user.Avatar)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil
