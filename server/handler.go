@@ -302,8 +302,9 @@ func GetLoginUser(ctx *goweb.Context) (*models.User, error) {
 		u := &models.User{}
 		u.Id = s.Claims["sub"].(string)
 		u.Name = s.Claims["name"].(string)
-		avartar := s.Claims["avatar"].(string)
-		u.Avatar = &avartar
+		if avartar, ok := s.Claims["avatar"].(string); ok {
+			u.Avatar = &avartar
+		}
 		return u, nil
 	}
 }
