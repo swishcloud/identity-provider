@@ -9,27 +9,9 @@ import (
 	"strings"
 )
 
-var Config config
-
-type config struct {
-	HYDRA_HOST               string `yaml:"hydra_host"`
-	HYDRA_PUBLIC_PORT        string `yaml:"hydra_public_port"`
-	HYDRA_ADMIN_PORT         string `yaml:"hydra_admin_port"`
-	IS_HTTPS                 bool   `yaml:"is_https"`
-	LISTEN_ADDRESS           string `yaml:"listen_address"`
-	WEBSITE_NAME             string `yaml:"website_name"`
-	SECRET                   string `yaml:"secret"`
-	DB_CONN_INFO             string `yaml:"db_conn_info"`
-	Post_Logout_Redirect_Uri string `yaml:"post_logout_redirect_uri"`
-}
-
-func init() {
-
-}
-
-func GetUriString(host, port string, path string, urlParameters url.Values) string {
+func GetUriString(host, port string, is_https bool, path string, urlParameters url.Values) string {
 	var scheme string
-	if Config.IS_HTTPS {
+	if is_https {
 		scheme = "https"
 	} else {
 		scheme = "http"

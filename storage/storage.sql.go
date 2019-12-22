@@ -16,8 +16,8 @@ type SQLManager struct {
 	DB *sql.DB
 }
 
-func NewSQLManager() *SQLManager {
-	db, err := sql.Open("postgres", global.Config.DB_CONN_INFO)
+func NewSQLManager(db_conn_info string) *SQLManager {
+	db, err := sql.Open("postgres", db_conn_info)
 	global.Err(err)
 	return &SQLManager{DB: db}
 }
