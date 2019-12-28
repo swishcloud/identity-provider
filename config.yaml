@@ -2,12 +2,9 @@ hydra_host: "127.0.0.1"
 hydra_public_port: 8010
 hydra_admin_port: 8011
 is_https: false
-listen_address: "127.0.0.1:11109"
+listen_address: "0.0.0.0:11109"
 website_name: "IDP"
 secret: "IDENTITY_PROVIDER_SECRET"
 db_conn_info: "postgres://hydra:secret@192.168.100.8:5420/idp?sslmode=disable"
 post_logout_redirect_uri: "http://127.0.0.1:11109/login"
 email:
-  smtp_username: swish-cloud
-  smtp_password: password
-  smtp_addr: swish-cloud@qq.com

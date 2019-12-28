@@ -24,6 +24,7 @@ echo sleep 5 seconds for waiting brand-new database to run
 sleep 5
 #set environments for develoption
 export HydraDSN=postgres://hydra:secret@192.168.100.8:5420/hydra?sslmode=disable \
+export IDPDSN=postgres://hydra:secret@192.168.100.8:5420/idp?sslmode=disable \
 export HydraPublicAddr=http://127.0.0.1:8010 \
 export IdentityProviderAddr=http://127.0.0.1:11109 \
 export SECRETS_SYSTEM_HYDRA=JWyB4HySJjACDuktN98Vv1R4GyOPfqta
@@ -50,5 +51,9 @@ docker run \
   -e URLS_LOGOUT=$IdentityProviderAddr/logout \
   -e URLS_POST_LOGOUT_REDIRECT=$IdentityProviderAddr/ \
   oryd/hydra:v1.0.8 serve all --dangerous-force-http
+#create database idp
+docker exec hydra-postgres psql -U hydra -c "CREATE DATABASE idp"
   #migrate idp database
-  docker run --rm dev migrate sql --conn_info=$HydraDSN
+  export IMAGE_TAG=dev
+  ./docker/build.sh
+  docker run --rm $IMAGE_TAG migrate sql --conn_info=$IDPDSN

@@ -5,16 +5,94 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
 
+	"github.com/swishcloud/goblog/common"
 	"github.com/swishcloud/identity-provider/global"
+	"github.com/swishcloud/identity-provider/storage"
 	"github.com/swishcloud/identity-provider/storage/models"
 
 	"github.com/swishcloud/goweb"
 	"github.com/swishcloud/goweb/auth"
 )
+
+const (
+	Path_Email_Validate     = "/email-validate"
+	Path_Register_Succeeded = "/register-succeeded"
+)
+
+func EmailValidateHandler(s *IDPServer) goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		email := ctx.Request.URL.Query().Get("email")
+		code := ctx.Request.URL.Query().Get("code")
+		s.GetStorage(ctx).EmailValidate(email, code)
+		http.Redirect(ctx.Writer, ctx.Request, "/", 302)
+	}
+}
+func RegisterHandler(s *IDPServer) goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		username := ctx.Request.PostForm.Get("username")
+		password := ctx.Request.PostForm.Get("password")
+		confirmPassword := ctx.Request.PostForm.Get("confirmPassword")
+		email := ctx.Request.PostForm.Get("email")
+		send_email := ctx.Request.PostForm.Get("send_email")
+		if password != confirmPassword {
+			ctx.Failed("password and confirm password are inconsistent")
+			return
+		}
+		s.GetStorage(ctx).AddUser(username, password, email)
+		host, port, err := net.SplitHostPort(ctx.Request.Host)
+		if err != nil {
+			panic(err)
+		}
+		user := s.GetStorage(ctx).GetUserByName(username)
+		activateAddr := global.GetUriString(host, port, s.config.IS_HTTPS, Path_Email_Validate+"?email="+user.Email+"&code="+url.QueryEscape(*user.Email_activation_code), nil)
+		if send_email != "0" {
+			s.emailSender.SendEmail(user.Email, "邮箱激活", fmt.Sprintf("<html><body>"+
+				"%s，您好:<br/><br/>"+
+				"感谢您注册%s,您的登录邮箱为%s,请点击以下链接激活您的邮箱地址：<br/><br/>"+
+				"<a href='%s'>%s</a><br/><br/>"+
+				"如果以上链接无法访问，请将该网址复制并粘贴至浏览器窗口中直接访问。", user.Name, s.config.WEBSITE_NAME, user.Email, activateAddr, activateAddr)+
+				"</body></html>")
+		}
+		ctx.Success(struct {
+			RedirectUri string `json:"redirectUri"`
+		}{RedirectUri: Path_Register_Succeeded})
+	}
+}
+func RegisterSucceededHandler(s *IDPServer) goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		ctx.RenderPage(s.newPageModel(ctx, nil), "templates/layout.html", "templates/register_succeeded.html")
+	}
+}
+func loginAuthenticate(s storage.Storage, account, password string) (*models.User, error) {
+	user := s.GetUserByName(account)
+	if user == nil {
+		return nil, errors.New("not found the user named " + account)
+	}
+	if !user.Email_confirmed {
+		return nil, errors.New("your email not confirmed yet")
+	}
+	if !common.Md5Check(user.Password, password) {
+		return nil, errors.New("password not match")
+	}
+	return user, nil
+}
+func LoginHandler(s *IDPServer) goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		account := ctx.Request.Form.Get("account")
+		password := ctx.Request.Form.Get("password")
+		user, err := loginAuthenticate(s.GetStorage(ctx), account, password)
+		if err != nil {
+			panic(err)
+		}
+		login_challenge := ctx.Request.URL.Query().Get("login_challenge")
+		AcceptLogin(s.config, ctx, login_challenge, *user)
+	}
+}
 
 const (
 	LoginPath            = "/op/oauth2/auth/requests/login"

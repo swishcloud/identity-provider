@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"regexp"
 
-	"github.com/swishcloud/goblog/common"
 	"github.com/swishcloud/gostudy/email"
 	"github.com/swishcloud/goweb"
 	"github.com/swishcloud/goweb/auth"
@@ -42,7 +41,6 @@ type IDPServer struct {
 	emailSender   email.EmailSender
 	engine        *goweb.Engine
 	config        *Config
-	store         storage.Storage
 	oauth2_config *oauth2.Config
 }
 
@@ -59,10 +57,9 @@ func NewIDPServer(configPath string) *IDPServer {
 	if err != nil {
 		panic(err)
 	}
-
 	s.engine = goweb.Default()
+	s.engine.WM.HandlerWidget = &HandlerWidget{}
 	s.emailSender = email.EmailSender{UserName: s.config.Email.Smtp_username, Password: s.config.Email.Smtp_password, Addr: s.config.Email.Smtp_addr, Name: s.config.WEBSITE_NAME}
-	s.store = storage.NewSQLManager(s.config.DB_CONN_INFO)
 	s.oauth2_config = &oauth2.Config{
 		ClientID:     "IDENTITY_PROVIDER",
 		ClientSecret: s.config.SECRET,
@@ -73,6 +70,14 @@ func NewIDPServer(configPath string) *IDPServer {
 		},
 	}
 	return s
+}
+func (server *IDPServer) GetStorage(ctx *goweb.Context) storage.Storage {
+	m := ctx.Data["storage"]
+	if m == nil {
+		m = storage.NewSQLManager(server.config.DB_CONN_INFO)
+		ctx.Data["storage"] = m
+	}
+	return m.(storage.Storage)
 }
 
 func (server *IDPServer) newPageModel(ctx *goweb.Context, data interface{}) pageModel {
@@ -105,7 +110,7 @@ func (s *IDPServer) Serve() {
 		res := HydraConsentRes{}
 		json.Unmarshal(b, &res)
 
-		user := s.store.GetUserById(res.Subject)
+		user := s.GetStorage(ctx).GetUserById(res.Subject)
 
 		body := HydraConsentAcceptBody{}
 		body.Grant_access_token_audience = res.Requested_access_token_audience
@@ -136,20 +141,9 @@ func (s *IDPServer) Serve() {
 	s.engine.GET("/register", func(ctx *goweb.Context) {
 		ctx.RenderPage(s.newPageModel(ctx, nil), "templates/layout.html", "templates/register.html")
 	})
-	s.engine.POST("/register", func(ctx *goweb.Context) {
-		username := ctx.Request.PostForm.Get("username")
-		password := ctx.Request.PostForm.Get("password")
-		confirmPassword := ctx.Request.PostForm.Get("confirmPassword")
-		email := ctx.Request.PostForm.Get("email")
-		if password != confirmPassword {
-			ctx.Failed("password and confirm password are inconsistent")
-			return
-		}
-		s.store.AddUser(username, password, email)
-		ctx.Success(struct {
-			RedirectUri string `json:"redirectUri"`
-		}{RedirectUri: "/login"})
-	})
+	s.engine.POST("/register", RegisterHandler(s))
+	s.engine.GET(Path_Email_Validate, EmailValidateHandler(s))
+	s.engine.GET(Path_Register_Succeeded, RegisterSucceededHandler(s))
 	s.engine.GET("/login", func(ctx *goweb.Context) {
 		login_challenge := ctx.Request.URL.Query().Get("login_challenge")
 		if login_challenge == "" {
@@ -172,28 +166,13 @@ func (s *IDPServer) Serve() {
 				panic(err)
 			}
 			if loginRes.Skip {
-				AcceptLogin(s.config, ctx, login_challenge, *s.store.GetUserById(loginRes.Subject))
+				AcceptLogin(s.config, ctx, login_challenge, *(s.GetStorage(ctx).GetUserById(loginRes.Subject)))
 			} else {
 				ctx.RenderPage(s.newPageModel(ctx, nil), "templates/layout.html", "templates/login.html")
 			}
 		}
 	})
-	s.engine.POST("/login", func(ctx *goweb.Context) {
-		account := ctx.Request.Form.Get("account")
-		password := ctx.Request.Form.Get("password")
-		user := s.store.GetUserByName(account)
-		if user == nil {
-			panic("not found the user named " + account)
-		}
-		//if user.Password == nil {
-		//	panic("the user not set password")
-		//}
-		if !common.Md5Check(user.Password, password) {
-			panic("password not match")
-		}
-		login_challenge := ctx.Request.URL.Query().Get("login_challenge")
-		AcceptLogin(s.config, ctx, login_challenge, *user)
-	})
+	s.engine.POST("/login", LoginHandler(s))
 	s.engine.GET("/login-callback", func(ctx *goweb.Context) {
 		code := ctx.Request.URL.Query().Get("code")
 		token, err := s.oauth2_config.Exchange(context.Background(), code)
@@ -261,5 +240,21 @@ func (s *IDPServer) Serve() {
 	err := server.ListenAndServe()
 	if err != nil {
 		log.Fatal(err)
+	}
+}
+
+type HandlerWidget struct {
+}
+
+func (*HandlerWidget) Pre_Process(ctx *goweb.Context) {
+}
+func (*HandlerWidget) Post_Process(ctx *goweb.Context) {
+	m := ctx.Data["storage"]
+	if m != nil {
+		if ctx.Ok {
+			m.(storage.Storage).Commit()
+		} else {
+			m.(storage.Storage).Rollback()
+		}
 	}
 }

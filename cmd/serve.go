@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"log"
-
 	"github.com/swishcloud/identity-provider/flagx"
 	"github.com/swishcloud/identity-provider/server"
 
@@ -14,7 +12,6 @@ const SERVER_CONFIG_FILE = "IDENTITY_PROVIDER_CONFIG"
 var serveCmd = &cobra.Command{
 	Use: "serve",
 	Run: func(cmd *cobra.Command, args []string) {
-		log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile | log.LUTC)
 		path := flagx.MustGetString(cmd, "config")
 		server := server.NewIDPServer(path)
 		server.Serve()

@@ -8,5 +8,6 @@ import (
 
 func main() {
 	log.Println("pre-starting idp...")
+	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile | log.LUTC)
 	cmd.Execute()
 }

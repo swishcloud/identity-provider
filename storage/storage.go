@@ -9,4 +9,7 @@ type Storage interface {
 	GetUsers()
 	GetUserByName(name string) *models.User
 	GetUserById(name string) *models.User
+	Commit()
+	Rollback()
+	EmailValidate(email, code string)
 }
