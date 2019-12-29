@@ -74,6 +74,15 @@ func (m *SQLManager) GetUserById(id string) *models.User {
 	r := m.Tx.QueryRow("select id,name,email,password,avatar,email_confirmed,email_activation_code from public.\"user\" where id=$1", id)
 	return getUser(r)
 }
+func (m *SQLManager) ChangePassword(id string, newPassword string) {
+	hashedPwd := common.Md5Hash(newPassword)
+	r := m.Tx.MustExec("update public.\"user\" set password=$1,update_time=$2 where id=$3", hashedPwd, time.Now().UTC(), id)
+	n, err := r.RowsAffected()
+	global.Err(err)
+	if n != 1 {
+		panic("change password failed")
+	}
+}
 func getUser(r *sql.Row) *models.User {
 	user := models.User{}
 	err := r.Scan(&user.Id, &user.Name, &user.Email, &user.Password, &user.Avatar, &user.Email_confirmed, &user.Email_activation_code)

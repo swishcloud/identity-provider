@@ -31,6 +31,19 @@ func ChangePasswordHandler(s *IDPServer) goweb.HandlerFunc {
 		if ctx.Request.Method == "GET" {
 			ctx.RenderPage(s.newPageModel(ctx, nil), "templates/layout.html", "templates/change_password.html")
 		} else {
+			password := ctx.Request.PostForm.Get("password")
+			confirmPassword := ctx.Request.PostForm.Get("confirmPassword")
+			if password != confirmPassword {
+				panic("password and confirm password are inconsistent")
+			}
+			if len(password) < 8 {
+				panic("password length can't less than 8")
+			}
+			user, err := GetLoginUser(ctx)
+			if err != nil {
+				panic("login is invalid")
+			}
+			s.GetStorage(ctx).ChangePassword(user.Id, password)
 			ctx.Success(Path_Login)
 		}
 	}

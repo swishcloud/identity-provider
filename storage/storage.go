@@ -12,4 +12,5 @@ type Storage interface {
 	Commit()
 	Rollback()
 	EmailValidate(email, code string)
+	ChangePassword(id string, newPassword string)
 }
