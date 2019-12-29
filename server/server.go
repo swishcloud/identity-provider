@@ -144,6 +144,8 @@ func (s *IDPServer) Serve() {
 	s.engine.POST("/register", RegisterHandler(s))
 	s.engine.GET(Path_Email_Validate, EmailValidateHandler(s))
 	s.engine.GET(Path_Register_Succeeded, RegisterSucceededHandler(s))
+	s.engine.GET(Path_Change_Password, ChangePasswordHandler(s))
+	s.engine.POST(Path_Change_Password, ChangePasswordHandler(s))
 	s.engine.GET("/login", func(ctx *goweb.Context) {
 		login_challenge := ctx.Request.URL.Query().Get("login_challenge")
 		if login_challenge == "" {

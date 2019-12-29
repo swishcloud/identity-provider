@@ -20,10 +20,21 @@ import (
 )
 
 const (
+	Path_Login              = "/login"
 	Path_Email_Validate     = "/email-validate"
 	Path_Register_Succeeded = "/register-succeeded"
+	Path_Change_Password    = "/change-password"
 )
 
+func ChangePasswordHandler(s *IDPServer) goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		if ctx.Request.Method == "GET" {
+			ctx.RenderPage(s.newPageModel(ctx, nil), "templates/layout.html", "templates/change_password.html")
+		} else {
+			ctx.Success(Path_Login)
+		}
+	}
+}
 func EmailValidateHandler(s *IDPServer) goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
 		email := ctx.Request.URL.Query().Get("email")
