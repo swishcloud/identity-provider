@@ -19,9 +19,14 @@ type SQLManager struct {
 	Tx *tx.Tx
 }
 
+var db *sql.DB
+
 func NewSQLManager(db_conn_info string) *SQLManager {
-	db, err := sql.Open("postgres", db_conn_info)
-	global.Err(err)
+	if db == nil {
+		d, err := sql.Open("postgres", db_conn_info)
+		global.Err(err)
+		db = d
+	}
 	tx, err := tx.NewTx(db)
 	if err != nil {
 		panic(err)
