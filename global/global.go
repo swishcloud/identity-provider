@@ -2,6 +2,7 @@ package global
 
 import (
 	"bytes"
+	"crypto/tls"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -26,7 +27,7 @@ func GetUriString(host, port string, is_https bool, path string, urlParameters u
 	return scheme + "://" + net.JoinHostPort(host, port) + path + urlParameters.Encode()
 }
 
-func SendRestApiRequest(method string, urlPath string, body []byte) []byte {
+func SendRestApiRequest(method string, urlPath string, body []byte, skip_tls_verify bool) []byte {
 	headers := map[string][]string{
 		"Content-Type": []string{"application/x-www-form-urlencoded"},
 		"Accept":       []string{"application/json"},
@@ -37,7 +38,9 @@ func SendRestApiRequest(method string, urlPath string, body []byte) []byte {
 	}
 	req.Header = headers
 
-	client := &http.Client{}
+	tlsConfig := tls.Config{}
+	tlsConfig.InsecureSkipVerify = skip_tls_verify
+	client := &http.Client{Transport: &http.Transport{TLSClientConfig: &tlsConfig}}
 	resp, err := client.Do(req)
 	if err != nil {
 		panic(err)

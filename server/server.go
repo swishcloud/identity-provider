@@ -38,14 +38,15 @@ type Config_email struct {
 }
 
 type IDPServer struct {
-	emailSender   email.EmailSender
-	engine        *goweb.Engine
-	config        *Config
-	oauth2_config *oauth2.Config
+	emailSender     email.EmailSender
+	engine          *goweb.Engine
+	config          *Config
+	oauth2_config   *oauth2.Config
+	skip_tls_verify bool
 }
 
-func NewIDPServer(configPath string) *IDPServer {
-	s := &IDPServer{}
+func NewIDPServer(configPath string, skip_tls_verify bool) *IDPServer {
+	s := &IDPServer{skip_tls_verify: skip_tls_verify}
 	//read config
 	s.config = &Config{}
 	//s.config.Email = &Config_email{}
@@ -65,8 +66,8 @@ func NewIDPServer(configPath string) *IDPServer {
 		ClientSecret: s.config.SECRET,
 		Scopes:       []string{"offline", "openid", "profile"},
 		Endpoint: oauth2.Endpoint{
-			AuthURL:  global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_PUBLIC_PORT, s.config.IS_HTTPS, "/op/oauth2/auth", nil),
-			TokenURL: global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_PUBLIC_PORT, s.config.IS_HTTPS, "/op/oauth2/token", nil),
+			AuthURL:  global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_PUBLIC_PORT, s.config.IS_HTTPS, "/oauth2/auth", nil),
+			TokenURL: global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_PUBLIC_PORT, s.config.IS_HTTPS, "/oauth2/token", nil),
 		},
 	}
 	return s
@@ -92,7 +93,7 @@ func (server *IDPServer) newPageModel(ctx *goweb.Context, data interface{}) page
 
 func (s *IDPServer) Serve() {
 	privileged_g := s.engine.Group()
-	privileged_g.Use(introspectTokenMiddleware(s.config))
+	privileged_g.Use(introspectTokenMiddleware(s))
 	privileged_g.GET("/", func(ctx *goweb.Context) {
 		ctx.RenderPage(s.newPageModel(ctx, nil), "templates/layout.html", "templates/index.html")
 	})
@@ -106,7 +107,7 @@ func (s *IDPServer) Serve() {
 		consent_challenge := ctx.Request.URL.Query().Get("consent_challenge")
 		parameters := url.Values{}
 		parameters.Add("consent_challenge", consent_challenge)
-		b := global.SendRestApiRequest("GET", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, s.config.IS_HTTPS, ConsentPath, parameters), nil)
+		b := global.SendRestApiRequest("GET", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, s.config.IS_HTTPS, ConsentPath, parameters), nil, s.skip_tls_verify)
 		res := HydraConsentRes{}
 		json.Unmarshal(b, &res)
 
@@ -122,7 +123,7 @@ func (s *IDPServer) Serve() {
 		if err != nil {
 			panic(err)
 		}
-		putRes := global.SendRestApiRequest("PUT", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, s.config.IS_HTTPS, ConsentPath+"/accept", parameters), b)
+		putRes := global.SendRestApiRequest("PUT", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, s.config.IS_HTTPS, ConsentPath+"/accept", parameters), b, s.skip_tls_verify)
 		consentAcceptRes := HydraConsentAcceptRes{}
 		err = json.Unmarshal(putRes, &consentAcceptRes)
 		if err != nil {
@@ -157,7 +158,7 @@ func (s *IDPServer) Serve() {
 			parameters := url.Values{}
 			parameters.Add("login_challenge", login_challenge)
 
-			b := global.SendRestApiRequest("GET", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, s.config.IS_HTTPS, LoginPath, parameters), nil)
+			b := global.SendRestApiRequest("GET", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, s.config.IS_HTTPS, LoginPath, parameters), nil, s.skip_tls_verify)
 			loginRes := HydraLoginRes{}
 			err := json.Unmarshal(b, &loginRes)
 			if err != nil {
@@ -168,7 +169,7 @@ func (s *IDPServer) Serve() {
 				panic(err)
 			}
 			if loginRes.Skip {
-				AcceptLogin(s.config, ctx, login_challenge, *(s.GetStorage(ctx).GetUserById(loginRes.Subject)))
+				AcceptLogin(s, ctx, login_challenge, *(s.GetStorage(ctx).GetUserById(loginRes.Subject)))
 			} else {
 				ctx.RenderPage(s.newPageModel(ctx, nil), "templates/layout.html", "templates/login.html")
 			}
@@ -205,13 +206,13 @@ func (s *IDPServer) Serve() {
 		parameters := url.Values{}
 		parameters.Add("logout_challenge", logout_challenge)
 
-		b := global.SendRestApiRequest("GET", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, s.config.IS_HTTPS, LogoutPath, parameters), nil)
+		b := global.SendRestApiRequest("GET", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, s.config.IS_HTTPS, LogoutPath, parameters), nil, s.skip_tls_verify)
 		information := hydraLogoutRequestInformation{}
 		err := json.Unmarshal(b, &information)
 		if err != nil {
 			panic(err)
 		}
-		putRes := global.SendRestApiRequest("PUT", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, s.config.IS_HTTPS, LogoutPath+"/accept", parameters), nil)
+		putRes := global.SendRestApiRequest("PUT", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, s.config.IS_HTTPS, LogoutPath+"/accept", parameters), nil, s.skip_tls_verify)
 		logoutAcceptRes := HydraLogoutAcceptRes{}
 		err = json.Unmarshal(putRes, &logoutAcceptRes)
 		if err != nil {
@@ -234,12 +235,12 @@ func (s *IDPServer) Serve() {
 
 		})
 	})
-	log.Println("accepting tcp connections on http://" + s.config.LISTEN_ADDRESS)
+	log.Println("accepting tcp connections on https://" + s.config.LISTEN_ADDRESS)
 	server := http.Server{
 		Addr:    s.config.LISTEN_ADDRESS,
 		Handler: s.engine,
 	}
-	err := server.ListenAndServe()
+	err := server.ListenAndServeTLS("localhost.crt", "localhost.key")
 	if err != nil {
 		log.Fatal(err)
 	}
