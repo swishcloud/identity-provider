@@ -1,8 +1,8 @@
 #!/bin/sh
 #set environments for develoption
-export GOBLOGAddr=http://127.0.0.1:8080 
-export IDENTITY_PROVIDER_ADDDR=http://127.0.0.1:11109
-export HydraAdminAddr=http://192.168.100.8:8009 
+export GOBLOGAddr=http://localhost:8080 
+export IDENTITY_PROVIDER_ADDDR=https://localhost:11109
+export HydraAdminAddr=https://192.168.100.8:8009 
 #create client GOBLOG
 docker run --rm -it \
  -e HYDRA_ADMIN_URL=$HydraAdminAddr \

@@ -12,7 +12,7 @@ import (
 const config_path = "/workspace/go/src/github.com/swishcloud/identity-provider/config.yaml"
 
 func TestRegisterHandler(t *testing.T) {
-	s := NewIDPServer(config_path)
+	s := NewIDPServer(config_path, true)
 	s.engine.POST("/register", RegisterHandler(s))
 	ts := httptest.NewTLSServer(s.engine)
 	defer ts.Close()

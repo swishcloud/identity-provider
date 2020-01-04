@@ -73,7 +73,7 @@ func RegisterHandler(s *IDPServer) goweb.HandlerFunc {
 			panic(err)
 		}
 		user := s.GetStorage(ctx).GetUserByName(username)
-		activateAddr := global.GetUriString(host, port, s.config.IS_HTTPS, Path_Email_Validate+"?email="+user.Email+"&code="+url.QueryEscape(*user.Email_activation_code), nil)
+		activateAddr := global.GetUriString(host, port, Path_Email_Validate+"?email="+user.Email+"&code="+url.QueryEscape(*user.Email_activation_code), nil)
 		if send_email != "0" {
 			s.emailSender.SendEmail(user.Email, "邮箱激活", fmt.Sprintf("<html><body>"+
 				"%s，您好:<br/><br/>"+
@@ -114,24 +114,25 @@ func LoginHandler(s *IDPServer) goweb.HandlerFunc {
 			panic(err)
 		}
 		login_challenge := ctx.Request.URL.Query().Get("login_challenge")
-		AcceptLogin(s.config, ctx, login_challenge, *user)
+		AcceptLogin(s, ctx, login_challenge, *user)
 	}
 }
 
 const (
-	LoginPath            = "/op/oauth2/auth/requests/login"
-	ConsentPath          = "/op/oauth2/auth/requests/consent"
-	LogoutPath           = "/op/oauth2/auth/requests/logout"
-	SessionsPath         = "/op/oauth2/auth/sessions"
-	IntrospectPath       = "/op/oauth2/introspect"
-	jwk_json_path        = "/op/.well-known/jwks.json"
-	sessions_logout_path = "/op/oauth2/sessions/logout"
+	LoginPath            = "/oauth2/auth/requests/login"
+	ConsentPath          = "/oauth2/auth/requests/consent"
+	LogoutPath           = "/oauth2/auth/requests/logout"
+	SessionsPath         = "/oauth2/auth/sessions"
+	IntrospectPath       = "/oauth2/introspect"
+	jwk_json_path        = "/.well-known/jwks.json"
+	sessions_logout_path = "/oauth2/sessions/logout"
 )
 
 func onError(ctx *goweb.Context, err error) {
 	panic(err)
 }
-func introspectTokenMiddleware(config *Config) func(ctx *goweb.Context) {
+
+func introspectTokenMiddleware(s *IDPServer) goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
 		if auth.HasLoggedIn(ctx) {
 			ctx.Next()
@@ -151,7 +152,7 @@ func introspectTokenMiddleware(config *Config) func(ctx *goweb.Context) {
 		parameters := url.Values{}
 		parameters.Add("token", tokenStrs[1])
 		parameters.Add("scope", "profile")
-		b := global.SendRestApiRequest("POST", global.GetUriString(config.HYDRA_HOST, config.HYDRA_ADMIN_PORT, config.IS_HTTPS, IntrospectPath, parameters), nil)
+		b := global.SendRestApiRequest("POST", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, IntrospectPath, parameters), nil, s.skip_tls_verify)
 		m := map[string]interface{}{}
 		err := json.Unmarshal(b, &m)
 		if err != nil {
@@ -165,7 +166,7 @@ func introspectTokenMiddleware(config *Config) func(ctx *goweb.Context) {
 		}
 	}
 }
-func AcceptLogin(config *Config, ctx *goweb.Context, login_challenge string, user models.User) {
+func AcceptLogin(s *IDPServer, ctx *goweb.Context, login_challenge string, user models.User) {
 	body := HydraLoginAcceptBody{}
 	body.Subject = user.Id
 	body.Remember = true
@@ -173,16 +174,13 @@ func AcceptLogin(config *Config, ctx *goweb.Context, login_challenge string, use
 	b, err := json.Marshal(body)
 	parameters := url.Values{}
 	parameters.Add("login_challenge", login_challenge)
-	putRes := global.SendRestApiRequest("PUT", global.GetUriString(config.HYDRA_HOST, config.HYDRA_ADMIN_PORT, config.IS_HTTPS, LoginPath+"/accept", parameters), b)
+	putRes := global.SendRestApiRequest("PUT", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, LoginPath+"/accept", parameters), b, s.skip_tls_verify)
 	loginAcceptRes := HydraLoginAcceptRes{}
 	fmt.Println(string(putRes))
 	json.Unmarshal(putRes, &loginAcceptRes)
 	redirectUrl, err := url.ParseRequestURI(loginAcceptRes.Redirect_to)
 	if err != nil {
 		panic(err)
-	}
-	if !config.IS_HTTPS {
-		redirectUrl.Scheme = "http"
 	}
 	if ctx.Request.Method == "GET" {
 		http.Redirect(ctx.Writer, ctx.Request, redirectUrl.String(), 302)

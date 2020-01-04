@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -23,7 +24,6 @@ type Config struct {
 	HYDRA_HOST               string       `yaml:"hydra_host"`
 	HYDRA_PUBLIC_PORT        string       `yaml:"hydra_public_port"`
 	HYDRA_ADMIN_PORT         string       `yaml:"hydra_admin_port"`
-	IS_HTTPS                 bool         `yaml:"is_https"`
 	LISTEN_ADDRESS           string       `yaml:"listen_address"`
 	WEBSITE_NAME             string       `yaml:"website_name"`
 	SECRET                   string       `yaml:"secret"`
@@ -38,14 +38,15 @@ type Config_email struct {
 }
 
 type IDPServer struct {
-	emailSender   email.EmailSender
-	engine        *goweb.Engine
-	config        *Config
-	oauth2_config *oauth2.Config
+	emailSender     email.EmailSender
+	engine          *goweb.Engine
+	config          *Config
+	oauth2_config   *oauth2.Config
+	skip_tls_verify bool
 }
 
-func NewIDPServer(configPath string) *IDPServer {
-	s := &IDPServer{}
+func NewIDPServer(configPath string, skip_tls_verify bool) *IDPServer {
+	s := &IDPServer{skip_tls_verify: skip_tls_verify}
 	//read config
 	s.config = &Config{}
 	//s.config.Email = &Config_email{}
@@ -65,8 +66,8 @@ func NewIDPServer(configPath string) *IDPServer {
 		ClientSecret: s.config.SECRET,
 		Scopes:       []string{"offline", "openid", "profile"},
 		Endpoint: oauth2.Endpoint{
-			AuthURL:  global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_PUBLIC_PORT, s.config.IS_HTTPS, "/op/oauth2/auth", nil),
-			TokenURL: global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_PUBLIC_PORT, s.config.IS_HTTPS, "/op/oauth2/token", nil),
+			AuthURL:  global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_PUBLIC_PORT, "/oauth2/auth", nil),
+			TokenURL: global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_PUBLIC_PORT, "/oauth2/token", nil),
 		},
 	}
 	return s
@@ -92,7 +93,7 @@ func (server *IDPServer) newPageModel(ctx *goweb.Context, data interface{}) page
 
 func (s *IDPServer) Serve() {
 	privileged_g := s.engine.Group()
-	privileged_g.Use(introspectTokenMiddleware(s.config))
+	privileged_g.Use(introspectTokenMiddleware(s))
 	privileged_g.GET("/", func(ctx *goweb.Context) {
 		ctx.RenderPage(s.newPageModel(ctx, nil), "templates/layout.html", "templates/index.html")
 	})
@@ -106,7 +107,7 @@ func (s *IDPServer) Serve() {
 		consent_challenge := ctx.Request.URL.Query().Get("consent_challenge")
 		parameters := url.Values{}
 		parameters.Add("consent_challenge", consent_challenge)
-		b := global.SendRestApiRequest("GET", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, s.config.IS_HTTPS, ConsentPath, parameters), nil)
+		b := global.SendRestApiRequest("GET", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, ConsentPath, parameters), nil, s.skip_tls_verify)
 		res := HydraConsentRes{}
 		json.Unmarshal(b, &res)
 
@@ -122,21 +123,17 @@ func (s *IDPServer) Serve() {
 		if err != nil {
 			panic(err)
 		}
-		putRes := global.SendRestApiRequest("PUT", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, s.config.IS_HTTPS, ConsentPath+"/accept", parameters), b)
+		putRes := global.SendRestApiRequest("PUT", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, ConsentPath+"/accept", parameters), b, s.skip_tls_verify)
 		consentAcceptRes := HydraConsentAcceptRes{}
 		err = json.Unmarshal(putRes, &consentAcceptRes)
 		if err != nil {
 			panic(err)
 		}
-		redirectUrl, err := url.ParseRequestURI(consentAcceptRes.Redirect_to)
 		fmt.Println("consent redirect:", consentAcceptRes.Redirect_to)
 		if err != nil {
 			panic(err)
 		}
-		if !s.config.IS_HTTPS {
-			redirectUrl.Scheme = "http"
-		}
-		http.Redirect(ctx.Writer, ctx.Request, redirectUrl.String(), 302)
+		http.Redirect(ctx.Writer, ctx.Request, consentAcceptRes.Redirect_to, 302)
 	})
 	s.engine.GET("/register", func(ctx *goweb.Context) {
 		ctx.RenderPage(s.newPageModel(ctx, nil), "templates/layout.html", "templates/register.html")
@@ -157,7 +154,7 @@ func (s *IDPServer) Serve() {
 			parameters := url.Values{}
 			parameters.Add("login_challenge", login_challenge)
 
-			b := global.SendRestApiRequest("GET", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, s.config.IS_HTTPS, LoginPath, parameters), nil)
+			b := global.SendRestApiRequest("GET", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, LoginPath, parameters), nil, s.skip_tls_verify)
 			loginRes := HydraLoginRes{}
 			err := json.Unmarshal(b, &loginRes)
 			if err != nil {
@@ -168,7 +165,7 @@ func (s *IDPServer) Serve() {
 				panic(err)
 			}
 			if loginRes.Skip {
-				AcceptLogin(s.config, ctx, login_challenge, *(s.GetStorage(ctx).GetUserById(loginRes.Subject)))
+				AcceptLogin(s, ctx, login_challenge, *(s.GetStorage(ctx).GetUserById(loginRes.Subject)))
 			} else {
 				ctx.RenderPage(s.newPageModel(ctx, nil), "templates/layout.html", "templates/login.html")
 			}
@@ -176,16 +173,25 @@ func (s *IDPServer) Serve() {
 	})
 	s.engine.POST("/login", LoginHandler(s))
 	s.engine.GET("/login-callback", func(ctx *goweb.Context) {
+		exc_ctx := context.Background()
+		if s.skip_tls_verify {
+			log.Println("Warning: Skipping TLS Certificate Verification.")
+			exc_ctx = context.WithValue(context.Background(), "", &http.Client{Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			}})
+			http.DefaultClient = exc_ctx.Value("").(*http.Client)
+		}
+
 		code := ctx.Request.URL.Query().Get("code")
-		token, err := s.oauth2_config.Exchange(context.Background(), code)
+		token, err := s.oauth2_config.Exchange(exc_ctx, code)
 		if err != nil {
 			ctx.Writer.Write([]byte(err.Error()))
 			return
 		}
-		auth.Login(ctx, token, global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_PUBLIC_PORT, s.config.IS_HTTPS, jwk_json_path, nil))
+		auth.Login(ctx, token, global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_PUBLIC_PORT, jwk_json_path, nil))
 		client := s.oauth2_config.Client(context.Background(), token)
 		token.SetAuthHeader(ctx.Request)
-		resp, err := client.Get("http://" + s.config.LISTEN_ADDRESS + "/user_info")
+		resp, err := client.Get("https://" + s.config.LISTEN_ADDRESS + "/user_info")
 		if err != nil {
 			panic(err)
 		}
@@ -205,23 +211,19 @@ func (s *IDPServer) Serve() {
 		parameters := url.Values{}
 		parameters.Add("logout_challenge", logout_challenge)
 
-		b := global.SendRestApiRequest("GET", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, s.config.IS_HTTPS, LogoutPath, parameters), nil)
+		b := global.SendRestApiRequest("GET", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, LogoutPath, parameters), nil, s.skip_tls_verify)
 		information := hydraLogoutRequestInformation{}
 		err := json.Unmarshal(b, &information)
 		if err != nil {
 			panic(err)
 		}
-		putRes := global.SendRestApiRequest("PUT", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, s.config.IS_HTTPS, LogoutPath+"/accept", parameters), nil)
+		putRes := global.SendRestApiRequest("PUT", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, LogoutPath+"/accept", parameters), nil, s.skip_tls_verify)
 		logoutAcceptRes := HydraLogoutAcceptRes{}
 		err = json.Unmarshal(putRes, &logoutAcceptRes)
 		if err != nil {
 			panic(err)
 		}
-		redirectUrl, err := url.ParseRequestURI(logoutAcceptRes.Redirect_to)
-		if !s.config.IS_HTTPS {
-			redirectUrl.Scheme = "http"
-		}
-		http.Redirect(ctx.Writer, ctx.Request, redirectUrl.String(), 302)
+		http.Redirect(ctx.Writer, ctx.Request, logoutAcceptRes.Redirect_to, 302)
 	})
 	privileged_g.POST("/logout", func(ctx *goweb.Context) {
 		//logout requrest from this site itself
@@ -230,16 +232,16 @@ func (s *IDPServer) Serve() {
 			parameters.Add("id_token_hint", id_token)
 			redirect_url := s.config.Post_Logout_Redirect_Uri
 			parameters.Add("post_logout_redirect_uri", redirect_url)
-			http.Redirect(ctx.Writer, ctx.Request, global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_PUBLIC_PORT, s.config.IS_HTTPS, sessions_logout_path, parameters), 302)
+			http.Redirect(ctx.Writer, ctx.Request, global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_PUBLIC_PORT, sessions_logout_path, parameters), 302)
 
 		})
 	})
-	log.Println("accepting tcp connections on http://" + s.config.LISTEN_ADDRESS)
+	log.Println("accepting tcp connections on https://" + s.config.LISTEN_ADDRESS)
 	server := http.Server{
 		Addr:    s.config.LISTEN_ADDRESS,
 		Handler: s.engine,
 	}
-	err := server.ListenAndServe()
+	err := server.ListenAndServeTLS("localhost.crt", "localhost.key")
 	if err != nil {
 		log.Fatal(err)
 	}
