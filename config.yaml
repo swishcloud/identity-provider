@@ -7,3 +7,5 @@ secret: "IDENTITY_PROVIDER_SECRET"
 db_conn_info: "postgres://hydra:secret@192.168.100.8:5420/idp?sslmode=disable"
 post_logout_redirect_uri: "https://localhost:11109/login"
 email:
+tls_cert_file: localhost.crt
+tls_key_file: localhost.key

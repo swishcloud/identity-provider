@@ -30,6 +30,8 @@ type Config struct {
 	DB_CONN_INFO             string       `yaml:"db_conn_info"`
 	Post_Logout_Redirect_Uri string       `yaml:"post_logout_redirect_uri"`
 	Email                    Config_email `yaml:"email"`
+	Tls_cert_file            string       `yaml:"tls_cert_file"`
+	Tls_key_file             string       `yaml:"tls_key_file"`
 }
 type Config_email struct {
 	Smtp_username string `yaml:"smtp_username"`
@@ -241,7 +243,7 @@ func (s *IDPServer) Serve() {
 		Addr:    s.config.LISTEN_ADDRESS,
 		Handler: s.engine,
 	}
-	err := server.ListenAndServeTLS("localhost.crt", "localhost.key")
+	err := server.ListenAndServeTLS(s.config.Tls_cert_file, s.config.Tls_key_file)
 	if err != nil {
 		log.Fatal(err)
 	}
