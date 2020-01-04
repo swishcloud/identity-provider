@@ -1,10 +1,9 @@
 hydra_host: "localhost"
 hydra_public_port: 8010
 hydra_admin_port: 8009
-is_https: true
 listen_address: "0.0.0.0:11109"
 website_name: "IDP"
 secret: "IDENTITY_PROVIDER_SECRET"
 db_conn_info: "postgres://hydra:secret@192.168.100.8:5420/idp?sslmode=disable"
-post_logout_redirect_uri: "http://localhost:11109/login"
+post_logout_redirect_uri: "https://localhost:11109/login"
 email:

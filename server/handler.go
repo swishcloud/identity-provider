@@ -73,7 +73,7 @@ func RegisterHandler(s *IDPServer) goweb.HandlerFunc {
 			panic(err)
 		}
 		user := s.GetStorage(ctx).GetUserByName(username)
-		activateAddr := global.GetUriString(host, port, s.config.IS_HTTPS, Path_Email_Validate+"?email="+user.Email+"&code="+url.QueryEscape(*user.Email_activation_code), nil)
+		activateAddr := global.GetUriString(host, port, Path_Email_Validate+"?email="+user.Email+"&code="+url.QueryEscape(*user.Email_activation_code), nil)
 		if send_email != "0" {
 			s.emailSender.SendEmail(user.Email, "邮箱激活", fmt.Sprintf("<html><body>"+
 				"%s，您好:<br/><br/>"+
@@ -152,7 +152,7 @@ func introspectTokenMiddleware(s *IDPServer) goweb.HandlerFunc {
 		parameters := url.Values{}
 		parameters.Add("token", tokenStrs[1])
 		parameters.Add("scope", "profile")
-		b := global.SendRestApiRequest("POST", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, s.config.IS_HTTPS, IntrospectPath, parameters), nil, s.skip_tls_verify)
+		b := global.SendRestApiRequest("POST", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, IntrospectPath, parameters), nil, s.skip_tls_verify)
 		m := map[string]interface{}{}
 		err := json.Unmarshal(b, &m)
 		if err != nil {
@@ -174,16 +174,13 @@ func AcceptLogin(s *IDPServer, ctx *goweb.Context, login_challenge string, user 
 	b, err := json.Marshal(body)
 	parameters := url.Values{}
 	parameters.Add("login_challenge", login_challenge)
-	putRes := global.SendRestApiRequest("PUT", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, s.config.IS_HTTPS, LoginPath+"/accept", parameters), b, s.skip_tls_verify)
+	putRes := global.SendRestApiRequest("PUT", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, LoginPath+"/accept", parameters), b, s.skip_tls_verify)
 	loginAcceptRes := HydraLoginAcceptRes{}
 	fmt.Println(string(putRes))
 	json.Unmarshal(putRes, &loginAcceptRes)
 	redirectUrl, err := url.ParseRequestURI(loginAcceptRes.Redirect_to)
 	if err != nil {
 		panic(err)
-	}
-	if !s.config.IS_HTTPS {
-		redirectUrl.Scheme = "http"
 	}
 	if ctx.Request.Method == "GET" {
 		http.Redirect(ctx.Writer, ctx.Request, redirectUrl.String(), 302)

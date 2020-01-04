@@ -10,13 +10,7 @@ import (
 	"strings"
 )
 
-func GetUriString(host, port string, is_https bool, path string, urlParameters url.Values) string {
-	var scheme string
-	if is_https {
-		scheme = "https"
-	} else {
-		scheme = "http"
-	}
+func GetUriString(host, port string, path string, urlParameters url.Values) string {
 	if urlParameters != nil {
 		if strings.Index(path, "?") == -1 {
 			path = path + "?"
@@ -24,7 +18,7 @@ func GetUriString(host, port string, is_https bool, path string, urlParameters u
 			path = path + "&"
 		}
 	}
-	return scheme + "://" + net.JoinHostPort(host, port) + path + urlParameters.Encode()
+	return "https://" + net.JoinHostPort(host, port) + path + urlParameters.Encode()
 }
 
 func SendRestApiRequest(method string, urlPath string, body []byte, skip_tls_verify bool) []byte {
@@ -51,7 +45,7 @@ func SendRestApiRequest(method string, urlPath string, body []byte, skip_tls_ver
 	}
 	return b
 }
-func Err(err error) {
+func Panic(err error) {
 	if err != nil {
 		panic(err)
 	}

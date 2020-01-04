@@ -24,7 +24,7 @@ var db *sql.DB
 func NewSQLManager(db_conn_info string) *SQLManager {
 	if db == nil {
 		d, err := sql.Open("postgres", db_conn_info)
-		global.Err(err)
+		global.Panic(err)
 		db = d
 	}
 	tx, err := tx.NewTx(db)
@@ -42,7 +42,7 @@ func (m *SQLManager) Rollback() {
 func (m *SQLManager) AddUser(username, password, email string) {
 	hashedPwd := common.Md5Hash(password)
 	code, err := keygenerator.NewKey(50, false, false, false, true)
-	global.Err(err)
+	global.Panic(err)
 	m.Tx.MustExec("INSERT INTO public.\"user\"(id, name, email, password,insert_time,email_confirmed, email_activation_code) VALUES ($1,$2,$3,$4,$5,$6,$7)", uuid.New(), username, email, hashedPwd, time.Now().UTC(), 0, code)
 }
 func (m *SQLManager) DeleteUser() {
@@ -83,7 +83,7 @@ func (m *SQLManager) ChangePassword(id string, newPassword string) {
 	hashedPwd := common.Md5Hash(newPassword)
 	r := m.Tx.MustExec("update public.\"user\" set password=$1,update_time=$2 where id=$3", hashedPwd, time.Now().UTC(), id)
 	n, err := r.RowsAffected()
-	global.Err(err)
+	global.Panic(err)
 	if n != 1 {
 		panic("change password failed")
 	}

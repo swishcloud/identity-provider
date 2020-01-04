@@ -57,3 +57,12 @@ docker exec hydra-postgres psql -U hydra -c "CREATE DATABASE idp"
   export IMAGE_TAG=dev
   ./docker/build.sh
   docker run --rm $IMAGE_TAG migrate sql --conn_info=$IDPDSN
+#generate TLS certificate
+openssl req -newkey rsa:4096 \
+-x509 \
+-sha256 \
+-days 365 \
+-nodes \
+-out localhost.crt \
+-keyout localhost.key \
+-subj "/C=CH/ST=GUANGDNG/L=SHENZHEN/O=SECURITY/OU=IT DEPARTMENT/CN=localhost"
