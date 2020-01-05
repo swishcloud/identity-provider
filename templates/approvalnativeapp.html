@@ -1,7 +1,7 @@
 {{define "content"}}
 <div class="container">
   <h5>please copy this code,switch to your application and paste it there:</h5>
-  <div style="display: flex;align-items:center"><input id="code" style="margin: 0 10px 0 0;border:0;width:800px;" value="{{.}}"></input ><button onclick="copyCode()" class="btn btn-success">copy</button></div>
+  <div style="display: flex;align-items:center"><input id="code" style="margin: 0 10px 0 0;border:0;width:800px;" readonly value="{{.}}"></input ><button onclick="copyCode()" class="btn btn-success">copy</button></div>
   
 </div>
 {{end}}
