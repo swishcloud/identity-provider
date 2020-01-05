@@ -141,6 +141,7 @@ func (s *IDPServer) Serve() {
 		ctx.RenderPage(s.newPageModel(ctx, nil), "templates/layout.html", "templates/register.html")
 	})
 	s.engine.POST("/register", RegisterHandler(s))
+	s.engine.GET("/.approvalnativeapp", ApprovalNativeAppHandler(s))
 	s.engine.GET(Path_Email_Validate, EmailValidateHandler(s))
 	s.engine.GET(Path_Register_Succeeded, RegisterSucceededHandler(s))
 	s.engine.GET(Path_Change_Password, ChangePasswordHandler(s))

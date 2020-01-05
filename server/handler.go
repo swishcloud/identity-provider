@@ -26,6 +26,12 @@ const (
 	Path_Change_Password    = "/change-password"
 )
 
+func ApprovalNativeAppHandler(s *IDPServer) goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		code := ctx.Request.URL.Query().Get("code")
+		ctx.RenderPage(s.newPageModel(ctx, code), "templates/layout.html", "templates/approvalnativeapp.html")
+	}
+}
 func ChangePasswordHandler(s *IDPServer) goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
 		if ctx.Request.Method == "GET" {
