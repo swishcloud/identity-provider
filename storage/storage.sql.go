@@ -68,29 +68,27 @@ func (m *SQLManager) EmailValidate(email, code string) {
 	m.Tx.MustExec("update public.\"user\" set email_confirmed=true where email=$1", email)
 }
 func (m *SQLManager) GetUserByEmail(email string) *models.User {
-	r := m.Tx.QueryRow("select id,name,email,password,avatar,email_confirmed,email_activation_code from public.\"user\" where email=$1", email)
-	return getUser(r)
+	return m.getUser("where email=$1", email)
 }
 func (m *SQLManager) GetUserByName(name string) *models.User {
-	r := m.Tx.QueryRow("select id,name,email,password,avatar,email_confirmed,email_activation_code from public.\"user\" where name=$1", name)
-	return getUser(r)
+	return m.getUser("where name=$1", name)
 }
 func (m *SQLManager) GetUserById(id string) *models.User {
-	r := m.Tx.QueryRow("select id,name,email,password,avatar,email_confirmed,email_activation_code from public.\"user\" where id=$1", id)
-	return getUser(r)
+	return m.getUser("where id=$1", id)
 }
 func (m *SQLManager) ChangePassword(id string, newPassword string) {
 	hashedPwd := common.Md5Hash(newPassword)
-	r := m.Tx.MustExec("update public.\"user\" set password=$1,update_time=$2 where id=$3", hashedPwd, time.Now().UTC(), id)
+	r := m.Tx.MustExec("update public.\"user\" set password=$1,update_time=$2,token_valid_after=$3 where id=$4", hashedPwd, time.Now().UTC(), time.Now().UTC(), id)
 	n, err := r.RowsAffected()
 	global.Panic(err)
 	if n != 1 {
 		panic("change password failed")
 	}
 }
-func getUser(r *sql.Row) *models.User {
+func (m *SQLManager) getUser(where string, args ...interface{}) *models.User {
+	r := m.Tx.QueryRow("select id,name,email,password,avatar,email_confirmed,email_activation_code,token_valid_after from public.\"user\" "+where, args...)
 	user := models.User{}
-	err := r.Scan(&user.Id, &user.Name, &user.Email, &user.Password, &user.Avatar, &user.Email_confirmed, &user.Email_activation_code)
+	err := r.Scan(&user.Id, &user.Name, &user.Email, &user.Password, &user.Avatar, &user.Email_confirmed, &user.Email_activation_code, &user.Token_valid_after)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil

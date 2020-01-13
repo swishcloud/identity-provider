@@ -93,6 +93,10 @@ func (server *IDPServer) newPageModel(ctx *goweb.Context, data interface{}) page
 	return m
 }
 
+const (
+	Api_Path_Introspect_Token = "/api/introspect-token"
+)
+
 func (s *IDPServer) Serve() {
 	privileged_g := s.engine.Group()
 	privileged_g.Use(introspectTokenMiddleware(s))
@@ -239,6 +243,7 @@ func (s *IDPServer) Serve() {
 
 		})
 	})
+	s.engine.GET(Api_Path_Introspect_Token, IntrospectTokenHandler(s))
 	log.Println("accepting tcp connections on https://" + s.config.LISTEN_ADDRESS)
 	server := http.Server{
 		Addr:    s.config.LISTEN_ADDRESS,

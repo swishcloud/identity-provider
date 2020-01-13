@@ -12,6 +12,7 @@ import (
 
 	"github.com/swishcloud/goblog/common"
 	"github.com/swishcloud/identity-provider/global"
+	"github.com/swishcloud/identity-provider/internal"
 	"github.com/swishcloud/identity-provider/storage"
 	"github.com/swishcloud/identity-provider/storage/models"
 
@@ -121,6 +122,39 @@ func LoginHandler(s *IDPServer) goweb.HandlerFunc {
 		}
 		login_challenge := ctx.Request.URL.Query().Get("login_challenge")
 		AcceptLogin(s, ctx, login_challenge, *user)
+	}
+}
+
+func IntrospectTokenHandler(s *IDPServer) goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		token, err := auth.GetBearerToken(ctx)
+		if err != nil {
+			ctx.Failed(err.Error())
+			return
+		}
+		scope := ctx.Request.URL.Query().Get("scope")
+
+		parameters := url.Values{}
+		parameters.Add("token", token)
+		parameters.Add("scope", scope)
+
+		b := global.SendRestApiRequest("POST", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, IntrospectPath, nil), []byte(parameters.Encode()), s.skip_tls_verify)
+		m := map[string]interface{}{}
+		err = json.Unmarshal(b, &m)
+		if err != nil {
+			panic(err)
+		}
+		isActive := m["active"].(bool)
+		if isActive {
+			sub := m["sub"].(string)
+			iat := m["iat"].(float64)
+			iat_time := internal.TimestampToTime(iat)
+			user := s.GetStorage(ctx).GetUserById(sub)
+			if iat_time.Before(user.Token_valid_after) {
+				isActive = false
+			}
+		}
+		ctx.Success(isActive)
 	}
 }
 
