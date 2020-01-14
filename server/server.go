@@ -29,6 +29,7 @@ type Config struct {
 	SECRET                   string       `yaml:"secret"`
 	DB_CONN_INFO             string       `yaml:"db_conn_info"`
 	Post_Logout_Redirect_Uri string       `yaml:"post_logout_redirect_uri"`
+	Introspect_Token_Url     string       `yaml:"introspect_token_url"`
 	Email                    Config_email `yaml:"email"`
 	Tls_cert_file            string       `yaml:"tls_cert_file"`
 	Tls_key_file             string       `yaml:"tls_key_file"`
@@ -87,7 +88,7 @@ func (server *IDPServer) newPageModel(ctx *goweb.Context, data interface{}) page
 	m := pageModel{}
 	m.Data = data
 	m.MobileCompatible = true
-	u, _ := GetLoginUser(ctx)
+	u, _ := server.GetLoginUser(ctx)
 	m.User = u
 	m.WebsiteName = server.config.WEBSITE_NAME
 	return m
@@ -196,17 +197,6 @@ func (s *IDPServer) Serve() {
 			return
 		}
 		auth.Login(ctx, token, global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_PUBLIC_PORT, jwk_json_path, nil))
-		client := s.oauth2_config.Client(context.Background(), token)
-		token.SetAuthHeader(ctx.Request)
-		resp, err := client.Get("https://" + s.config.LISTEN_ADDRESS + "/user_info")
-		if err != nil {
-			panic(err)
-		}
-		b, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			panic(err)
-		}
-		log.Println(string(b))
 		http.Redirect(ctx.Writer, ctx.Request, "/", 302)
 	})
 	privileged_g.GET("/user_info", func(ctx *goweb.Context) {
@@ -234,7 +224,7 @@ func (s *IDPServer) Serve() {
 	})
 	privileged_g.POST("/logout", func(ctx *goweb.Context) {
 		//logout requrest from this site itself
-		auth.Logout(ctx, func(id_token string) {
+		auth.Logout(ctx, s.oauth2_config, s.config.Introspect_Token_Url, s.skip_tls_verify, func(id_token string) {
 			parameters := url.Values{}
 			parameters.Add("id_token_hint", id_token)
 			redirect_url := s.config.Post_Logout_Redirect_Uri

@@ -46,7 +46,7 @@ func ChangePasswordHandler(s *IDPServer) goweb.HandlerFunc {
 			if len(password) < 8 {
 				panic("password length can't less than 8")
 			}
-			user, err := GetLoginUser(ctx)
+			user, err := s.GetLoginUser(ctx)
 			if err != nil {
 				panic("login is invalid")
 			}
@@ -174,7 +174,7 @@ func onError(ctx *goweb.Context, err error) {
 
 func introspectTokenMiddleware(s *IDPServer) goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
-		if auth.HasLoggedIn(ctx) {
+		if auth.HasLoggedIn(ctx, s.oauth2_config, s.config.Introspect_Token_Url, s.skip_tls_verify) {
 			ctx.Next()
 			return
 		}
@@ -237,8 +237,8 @@ type pageModel struct {
 	PageTitle        string
 }
 
-func GetLoginUser(ctx *goweb.Context) (*models.User, error) {
-	if s, err := auth.GetSessionByToken(ctx); err != nil {
+func (s *IDPServer) GetLoginUser(ctx *goweb.Context) (*models.User, error) {
+	if s, err := auth.GetSessionByToken(ctx, s.oauth2_config, s.config.Introspect_Token_Url, s.skip_tls_verify); err != nil {
 		return nil, err
 	} else {
 		u := &models.User{}

@@ -35,3 +35,27 @@ func TestRegisterHandler(t *testing.T) {
 		fmt.Println(err)
 	}
 }
+
+func TestEmailValidateHandler(t *testing.T) {
+	s := NewIDPServer(config_path, true)
+	s.engine.POST(Path_Email_Validate, EmailValidateHandler(s))
+	ts := httptest.NewTLSServer(s.engine)
+	defer ts.Close()
+	storage := storage.NewSQLManager(s.config.DB_CONN_INFO)
+	user := storage.GetUserByEmail("flwwd@outlook.com")
+	parameters := url.Values{}
+	parameters.Add("email", "flwwd@outlook.com")
+	parameters.Add("code", *user.Email_activation_code)
+	req := httptest.NewRequest("POST", ts.URL+Path_Email_Validate+"?"+parameters.Encode(), nil)
+	req.PostForm = url.Values{}
+
+	w := httptest.NewRecorder()
+	s.engine.ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Error("status:", w.Code)
+	}
+	_, err := loginAuthenticate(storage, "test", "test_secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+}
