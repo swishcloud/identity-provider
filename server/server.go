@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"regexp"
 
+	"github.com/swishcloud/gostudy/common"
 	"github.com/swishcloud/gostudy/email"
 	"github.com/swishcloud/goweb"
 	"github.com/swishcloud/goweb/auth"
@@ -97,6 +98,17 @@ func (server *IDPServer) newPageModel(ctx *goweb.Context, data interface{}) page
 const (
 	Api_Path_Introspect_Token = "/api/introspect-token"
 )
+
+func (s *IDPServer) invalidateLoginSession(sub string) {
+	rac := common.NewRestApiClient("DELETE", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, SessionsPath+"/login?subject="+sub, nil), nil, s.skip_tls_verify)
+	resp, err := rac.Do()
+	if err != nil {
+		panic(err)
+	}
+	if resp.StatusCode != 204 {
+		panic("response status of deleting sessions request:" + resp.Status)
+	}
+}
 
 func (s *IDPServer) Serve() {
 	privileged_g := s.engine.Group()

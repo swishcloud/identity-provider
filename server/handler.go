@@ -50,6 +50,7 @@ func ChangePasswordHandler(s *IDPServer) goweb.HandlerFunc {
 			if err != nil {
 				panic("login is invalid")
 			}
+			s.invalidateLoginSession(user.Id)
 			s.GetStorage(ctx).ChangePassword(user.Id, password)
 			ctx.Success(Path_Login)
 		}
