@@ -22,7 +22,7 @@ docker run \
  postgres
 echo sleep 5 seconds for waiting brand-new database to run
 sleep 5
-#set environments for develoption
+#set environments for developmennt
 export HydraDSN=postgres://hydra:secret@192.168.100.8:5420/hydra?sslmode=disable \
 export IDPDSN=postgres://hydra:secret@192.168.100.8:5420/idp?sslmode=disable \
 export HydraPublicAddr=https://localhost:8010 \
@@ -63,6 +63,7 @@ openssl req -newkey rsa:4096 \
 -sha256 \
 -days 365 \
 -nodes \
--out localhost.crt \
--keyout localhost.key \
+-out .cache/localhost.crt \
+-keyout .cache/localhost.key \
 -subj "/C=CH/ST=GUANGDNG/L=SHENZHEN/O=SECURITY/OU=IT DEPARTMENT/CN=localhost"
+#run docker container for idp
