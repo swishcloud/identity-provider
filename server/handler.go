@@ -8,7 +8,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"strings"
 
 	"github.com/swishcloud/goblog/common"
 	"github.com/swishcloud/identity-provider/global"
@@ -25,6 +24,7 @@ const (
 	Path_Email_Validate     = "/email-validate"
 	Path_Register_Succeeded = "/register-succeeded"
 	Path_Change_Password    = "/change-password"
+	Path_User_Info          = "/user_info"
 )
 
 func ApprovalNativeAppHandler(s *IDPServer) goweb.HandlerFunc {
@@ -125,37 +125,47 @@ func LoginHandler(s *IDPServer) goweb.HandlerFunc {
 		AcceptLogin(s, ctx, login_challenge, *user)
 	}
 }
+func introspectToken(s *IDPServer, ctx *goweb.Context) (bool, *models.User, error) {
+	token, err := auth.GetBearerToken(ctx)
+	if err != nil {
+		return false, nil, err
+	}
+	scope := ctx.Request.URL.Query().Get("scope")
 
+	parameters := url.Values{}
+	parameters.Add("token", token)
+	parameters.Add("scope", scope)
+
+	b := global.SendRestApiRequest("POST", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, IntrospectPath, nil), []byte(parameters.Encode()), s.skip_tls_verify)
+	m := map[string]interface{}{}
+	err = json.Unmarshal(b, &m)
+	if err != nil {
+		return false, nil, err
+	}
+	isActive := m["active"].(bool)
+	sub := m["sub"].(string)
+	iat := m["iat"].(float64)
+	iat_time := internal.TimestampToTime(iat)
+	user := s.GetStorage(ctx).GetUserById(sub)
+	if iat_time.Before(user.Token_valid_after) {
+		isActive = false
+	}
+	return isActive, user, nil
+}
 func IntrospectTokenHandler(s *IDPServer) goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
-		token, err := auth.GetBearerToken(ctx)
-		if err != nil {
-			ctx.Failed(err.Error())
-			return
-		}
-		scope := ctx.Request.URL.Query().Get("scope")
-
-		parameters := url.Values{}
-		parameters.Add("token", token)
-		parameters.Add("scope", scope)
-
-		b := global.SendRestApiRequest("POST", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, IntrospectPath, nil), []byte(parameters.Encode()), s.skip_tls_verify)
-		m := map[string]interface{}{}
-		err = json.Unmarshal(b, &m)
+		active, user, err := introspectToken(s, ctx)
 		if err != nil {
 			panic(err)
 		}
-		isActive := m["active"].(bool)
-		if isActive {
-			sub := m["sub"].(string)
-			iat := m["iat"].(float64)
-			iat_time := internal.TimestampToTime(iat)
-			user := s.GetStorage(ctx).GetUserById(sub)
-			if iat_time.Before(user.Token_valid_after) {
-				isActive = false
-			}
-		}
-		ctx.Success(isActive)
+		ctx.Success(map[string]interface{}{"active": active, "sub": user.Id})
+	}
+}
+
+func userInfoHandler(s *IDPServer) goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		user := ctx.Data["user"].(*models.User)
+		ctx.Success(user)
 	}
 }
 
@@ -172,38 +182,25 @@ const (
 func onError(ctx *goweb.Context, err error) {
 	panic(err)
 }
+func apiMiddleware(s *IDPServer) goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		active, user, err := introspectToken(s, ctx)
+		if err != nil {
+			panic(err)
+		}
+		if !active {
+			panic("the token is not valid")
+		}
+		ctx.Data["user"] = user
+	}
+}
 
 func introspectTokenMiddleware(s *IDPServer) goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
 		if auth.HasLoggedIn(ctx, s.oauth2_config, s.config.Introspect_Token_Url, s.skip_tls_verify) {
 			ctx.Next()
-			return
-		}
-		//if the user is not logged in the site,then check if has valid token
-		if len(ctx.Request.Header["Authorization"]) == 0 {
+		} else {
 			ctx.Writer.WriteHeader(http.StatusUnauthorized)
-			panic(errors.New("the user is not logged in and no bearer auth token exists"))
-		}
-		bearerToken := ctx.Request.Header["Authorization"][0]
-		tokenStrs := strings.Split(bearerToken, " ")
-		if len(tokenStrs) != 2 {
-			ctx.Writer.WriteHeader(http.StatusUnauthorized)
-			panic(errors.New("token parameter format error"))
-		}
-		parameters := url.Values{}
-		parameters.Add("token", tokenStrs[1])
-		parameters.Add("scope", "profile")
-		b := global.SendRestApiRequest("POST", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, IntrospectPath, parameters), nil, s.skip_tls_verify)
-		m := map[string]interface{}{}
-		err := json.Unmarshal(b, &m)
-		if err != nil {
-			panic(err)
-		}
-		isActive := m["active"].(bool)
-		fmt.Println(m)
-		if !isActive {
-			ctx.Writer.WriteHeader(http.StatusUnauthorized)
-			panic(errors.New("the token is not valid"))
 		}
 	}
 }

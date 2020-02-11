@@ -21,6 +21,9 @@ var app = {
                 if (typeof before == "function")
                     before()
                 $(form).ajaxSubmit({
+                    headers: {
+                        Accept: "application/json",
+                      },
                     success: function (res) {
                         if (typeof res.error === "undefined") {
                             res = {

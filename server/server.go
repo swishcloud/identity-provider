@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strings"
 
 	"github.com/swishcloud/gostudy/common"
 	"github.com/swishcloud/gostudy/email"
@@ -111,6 +112,9 @@ func (s *IDPServer) invalidateLoginSession(sub string) {
 }
 
 func (s *IDPServer) Serve() {
+	api_group := s.engine.Group()
+	api_group.Use(apiMiddleware(s))
+	api_group.GET(Path_User_Info, userInfoHandler(s))
 	privileged_g := s.engine.Group()
 	privileged_g.Use(introspectTokenMiddleware(s))
 	privileged_g.GET("/", func(ctx *goweb.Context) {
@@ -211,9 +215,6 @@ func (s *IDPServer) Serve() {
 		auth.Login(ctx, token, global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_PUBLIC_PORT, jwk_json_path, nil))
 		http.Redirect(ctx.Writer, ctx.Request, "/", 302)
 	})
-	privileged_g.GET("/user_info", func(ctx *goweb.Context) {
-
-	})
 	s.engine.GET("/logout", func(ctx *goweb.Context) {
 		logout_challenge := ctx.Request.URL.Query().Get("logout_challenge")
 		//logout requrest from third-party site
@@ -269,6 +270,15 @@ func (*HandlerWidget) Post_Process(ctx *goweb.Context) {
 			m.(storage.Storage).Commit()
 		} else {
 			m.(storage.Storage).Rollback()
+		}
+	}
+
+	if ctx.Err != nil {
+		accept := ctx.Request.Header.Get("Accept")
+		if strings.Contains(accept, "application/json") {
+			ctx.Failed(ctx.Err.Error())
+		} else {
+			ctx.Writer.Write([]byte(ctx.Err.Error()))
 		}
 	}
 }
