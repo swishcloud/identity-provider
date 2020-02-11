@@ -161,7 +161,6 @@ func IntrospectTokenHandler(s *IDPServer) goweb.HandlerFunc {
 		ctx.Success(map[string]interface{}{"active": active, "sub": user.Id})
 	}
 }
-
 func userInfoHandler(s *IDPServer) goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
 		user := ctx.Data["user"].(*models.User)

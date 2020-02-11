@@ -47,11 +47,15 @@ type IDPServer struct {
 	engine          *goweb.Engine
 	config          *Config
 	oauth2_config   *oauth2.Config
+	httpClient      *http.Client
 	skip_tls_verify bool
 }
 
 func NewIDPServer(configPath string, skip_tls_verify bool) *IDPServer {
-	s := &IDPServer{skip_tls_verify: skip_tls_verify}
+	s := &IDPServer{}
+	s.skip_tls_verify = skip_tls_verify
+	s.httpClient = &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: skip_tls_verify}}}
+	http.DefaultClient = s.httpClient
 	//read config
 	s.config = &Config{}
 	//s.config.Email = &Config_email{}
@@ -197,17 +201,8 @@ func (s *IDPServer) Serve() {
 	})
 	s.engine.POST("/login", LoginHandler(s))
 	s.engine.GET("/login-callback", func(ctx *goweb.Context) {
-		exc_ctx := context.Background()
-		if s.skip_tls_verify {
-			log.Println("Warning: Skipping TLS Certificate Verification.")
-			exc_ctx = context.WithValue(context.Background(), "", &http.Client{Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-			}})
-			http.DefaultClient = exc_ctx.Value("").(*http.Client)
-		}
-
 		code := ctx.Request.URL.Query().Get("code")
-		token, err := s.oauth2_config.Exchange(exc_ctx, code)
+		token, err := s.oauth2_config.Exchange(context.WithValue(context.Background(), "", s.httpClient), code)
 		if err != nil {
 			ctx.Writer.Write([]byte(err.Error()))
 			return

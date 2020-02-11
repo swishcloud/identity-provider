@@ -47,5 +47,5 @@ docker run --rm -it \
  --response-types token,code,id_token \
  --scope openid,offline,profile \
  --callbacks $FILESYNC_WEB_ADDDR/login-callback,$IDENTITY_PROVIDER_ADDDR/.approvalnativeapp \
- --post-logout-callbacks $FILESYNC_WEB_ADDDR/login \
+ --post-logout-callbacks $FILESYNC_WEB_ADDDR \
  --token-endpoint-auth-method client_secret_post
