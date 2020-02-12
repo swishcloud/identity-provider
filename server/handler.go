@@ -143,14 +143,17 @@ func introspectToken(s *IDPServer, ctx *goweb.Context) (bool, *models.User, erro
 		return false, nil, err
 	}
 	isActive := m["active"].(bool)
-	sub := m["sub"].(string)
-	iat := m["iat"].(float64)
-	iat_time := internal.TimestampToTime(iat)
-	user := s.GetStorage(ctx).GetUserById(sub)
-	if iat_time.Before(user.Token_valid_after) {
-		isActive = false
+	if isActive {
+		sub := m["sub"].(string)
+		iat := m["iat"].(float64)
+		iat_time := internal.TimestampToTime(iat)
+		user := s.GetStorage(ctx).GetUserById(sub)
+		if iat_time.Before(user.Token_valid_after) {
+			isActive = false
+		}
+		return isActive, user, nil
 	}
-	return isActive, user, nil
+	return false, nil, nil
 }
 func IntrospectTokenHandler(s *IDPServer) goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
@@ -158,7 +161,10 @@ func IntrospectTokenHandler(s *IDPServer) goweb.HandlerFunc {
 		if err != nil {
 			panic(err)
 		}
-		ctx.Success(map[string]interface{}{"active": active, "sub": user.Id})
+		if active {
+			ctx.Success(map[string]interface{}{"active": active, "sub": user.Id})
+		}
+		ctx.Success(map[string]interface{}{"active": active})
 	}
 }
 func userInfoHandler(s *IDPServer) goweb.HandlerFunc {
