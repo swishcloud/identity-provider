@@ -163,8 +163,9 @@ func IntrospectTokenHandler(s *IDPServer) goweb.HandlerFunc {
 		}
 		if active {
 			ctx.Success(map[string]interface{}{"active": active, "sub": user.Id})
+		} else {
+			ctx.Success(map[string]interface{}{"active": active})
 		}
-		ctx.Success(map[string]interface{}{"active": active})
 	}
 }
 func userInfoHandler(s *IDPServer) goweb.HandlerFunc {
@@ -219,7 +220,6 @@ func AcceptLogin(s *IDPServer, ctx *goweb.Context, login_challenge string, user 
 	parameters.Add("login_challenge", login_challenge)
 	putRes := global.SendRestApiRequest("PUT", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, LoginPath+"/accept", parameters), b, s.skip_tls_verify)
 	loginAcceptRes := HydraLoginAcceptRes{}
-	fmt.Println(string(putRes))
 	json.Unmarshal(putRes, &loginAcceptRes)
 	redirectUrl, err := url.ParseRequestURI(loginAcceptRes.Redirect_to)
 	if err != nil {
