@@ -48,6 +48,7 @@ type IDPServer struct {
 	config          *Config
 	oauth2_config   *oauth2.Config
 	httpClient      *http.Client
+	rac             *common.RestApiClient
 	skip_tls_verify bool
 }
 
@@ -56,6 +57,7 @@ func NewIDPServer(configPath string, skip_tls_verify bool) *IDPServer {
 	s.skip_tls_verify = skip_tls_verify
 	s.httpClient = &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: skip_tls_verify}}}
 	http.DefaultClient = s.httpClient
+	s.rac = common.NewRestApiClient(skip_tls_verify)
 	//read config
 	s.config = &Config{}
 	//s.config.Email = &Config_email{}
@@ -105,8 +107,8 @@ const (
 )
 
 func (s *IDPServer) invalidateLoginSession(sub string) {
-	rac := common.NewRestApiClient("DELETE", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, SessionsPath+"/login?subject="+sub, nil), nil, s.skip_tls_verify)
-	resp, err := rac.Do()
+	rar := common.NewRestApiRequest("DELETE", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, SessionsPath+"/login?subject="+sub, nil), nil)
+	resp, err := s.rac.Do(rar)
 	if err != nil {
 		panic(err)
 	}
@@ -134,7 +136,12 @@ func (s *IDPServer) Serve() {
 		consent_challenge := ctx.Request.URL.Query().Get("consent_challenge")
 		parameters := url.Values{}
 		parameters.Add("consent_challenge", consent_challenge)
-		b := global.SendRestApiRequest("GET", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, ConsentPath, parameters), nil, s.skip_tls_verify)
+		rar := common.NewRestApiRequest("GET", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, ConsentPath, parameters), nil)
+		resp, err := s.rac.Do(rar)
+		if err != nil {
+			panic(err)
+		}
+		b, err := ioutil.ReadAll(resp.Body)
 		res := HydraConsentRes{}
 		json.Unmarshal(b, &res)
 
@@ -146,11 +153,19 @@ func (s *IDPServer) Serve() {
 		body.Remember = true
 		body.Remember_for = 60 * 30
 		body.Session = HydraConsentAcceptBodySession{Id_token: map[string]interface{}{"name": user.Name, "avatar": user.Avatar, "email": user.Email}}
-		b, err := json.Marshal(body)
+		b, err = json.Marshal(body)
 		if err != nil {
 			panic(err)
 		}
-		putRes := global.SendRestApiRequest("PUT", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, ConsentPath+"/accept", parameters), b, s.skip_tls_verify)
+		rar = common.NewRestApiRequest("PUT", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, ConsentPath+"/accept", parameters), b)
+		resp, err = s.rac.Do(rar)
+		if err != nil {
+			panic(err)
+		}
+		putRes, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			panic(err)
+		}
 		consentAcceptRes := HydraConsentAcceptRes{}
 		err = json.Unmarshal(putRes, &consentAcceptRes)
 		if err != nil {
@@ -181,10 +196,17 @@ func (s *IDPServer) Serve() {
 			//processing login request from thid-party website or the site itself
 			parameters := url.Values{}
 			parameters.Add("login_challenge", login_challenge)
-
-			b := global.SendRestApiRequest("GET", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, LoginPath, parameters), nil, s.skip_tls_verify)
+			rar := common.NewRestApiRequest("GET", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, LoginPath, parameters), nil)
+			resp, err := s.rac.Do(rar)
+			if err != nil {
+				panic(err)
+			}
+			b, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				panic(err)
+			}
 			loginRes := HydraLoginRes{}
-			err := json.Unmarshal(b, &loginRes)
+			err = json.Unmarshal(b, &loginRes)
 			if err != nil {
 				ctx.Writer.Write(b)
 				return
@@ -215,14 +237,29 @@ func (s *IDPServer) Serve() {
 		//logout requrest from third-party site
 		parameters := url.Values{}
 		parameters.Add("logout_challenge", logout_challenge)
-
-		b := global.SendRestApiRequest("GET", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, LogoutPath, parameters), nil, s.skip_tls_verify)
-		information := hydraLogoutRequestInformation{}
-		err := json.Unmarshal(b, &information)
+		rar := common.NewRestApiRequest("GET", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, LogoutPath, parameters), nil)
+		resp, err := s.rac.Do(rar)
 		if err != nil {
 			panic(err)
 		}
-		putRes := global.SendRestApiRequest("PUT", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, LogoutPath+"/accept", parameters), nil, s.skip_tls_verify)
+		b, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			panic(err)
+		}
+		information := hydraLogoutRequestInformation{}
+		err = json.Unmarshal(b, &information)
+		if err != nil {
+			panic(err)
+		}
+		rar = common.NewRestApiRequest("PUT", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, LogoutPath+"/accept", parameters), nil)
+		resp, err = s.rac.Do(rar)
+		if err != nil {
+			panic(err)
+		}
+		putRes, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			panic(err)
+		}
 		logoutAcceptRes := HydraLogoutAcceptRes{}
 		err = json.Unmarshal(putRes, &logoutAcceptRes)
 		if err != nil {
@@ -232,7 +269,7 @@ func (s *IDPServer) Serve() {
 	})
 	privileged_g.POST("/logout", func(ctx *goweb.Context) {
 		//logout requrest from this site itself
-		auth.Logout(ctx, s.oauth2_config, s.config.Introspect_Token_Url, s.skip_tls_verify, func(id_token string) {
+		auth.Logout(s.rac, ctx, s.oauth2_config, s.config.Introspect_Token_Url, s.skip_tls_verify, func(id_token string) {
 			parameters := url.Values{}
 			parameters.Add("id_token_hint", id_token)
 			redirect_url := s.config.Post_Logout_Redirect_Uri

@@ -5,11 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
 
-	"github.com/swishcloud/goblog/common"
+	"github.com/swishcloud/gostudy/common"
 	"github.com/swishcloud/identity-provider/global"
 	"github.com/swishcloud/identity-provider/internal"
 	"github.com/swishcloud/identity-provider/storage"
@@ -136,9 +137,9 @@ func introspectToken(s *IDPServer, ctx *goweb.Context) (bool, *models.User, erro
 	parameters.Add("token", token)
 	parameters.Add("scope", scope)
 
-	b := global.SendRestApiRequest("POST", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, IntrospectPath, nil), []byte(parameters.Encode()), s.skip_tls_verify)
-	m := map[string]interface{}{}
-	err = json.Unmarshal(b, &m)
+	rar := common.NewRestApiRequest("POST", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, IntrospectPath, nil), []byte(parameters.Encode()))
+	resp, err := s.rac.Do(rar)
+	m, err := common.ReadAsMap(resp.Body)
 	if err != nil {
 		return false, nil, err
 	}
@@ -203,7 +204,7 @@ func apiMiddleware(s *IDPServer) goweb.HandlerFunc {
 
 func introspectTokenMiddleware(s *IDPServer) goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
-		if auth.HasLoggedIn(ctx, s.oauth2_config, s.config.Introspect_Token_Url, s.skip_tls_verify) {
+		if auth.HasLoggedIn(s.rac, ctx, s.oauth2_config, s.config.Introspect_Token_Url, s.skip_tls_verify) {
 			ctx.Next()
 		} else {
 			ctx.Writer.WriteHeader(http.StatusUnauthorized)
@@ -218,7 +219,15 @@ func AcceptLogin(s *IDPServer, ctx *goweb.Context, login_challenge string, user 
 	b, err := json.Marshal(body)
 	parameters := url.Values{}
 	parameters.Add("login_challenge", login_challenge)
-	putRes := global.SendRestApiRequest("PUT", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, LoginPath+"/accept", parameters), b, s.skip_tls_verify)
+	rar := common.NewRestApiRequest("PUT", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, LoginPath+"/accept", parameters), b)
+	resp, err := s.rac.Do(rar)
+	if err != nil {
+		panic(err)
+	}
+	putRes, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		panic(err)
+	}
 	loginAcceptRes := HydraLoginAcceptRes{}
 	json.Unmarshal(putRes, &loginAcceptRes)
 	redirectUrl, err := url.ParseRequestURI(loginAcceptRes.Redirect_to)
@@ -241,7 +250,7 @@ type pageModel struct {
 }
 
 func (s *IDPServer) GetLoginUser(ctx *goweb.Context) (*models.User, error) {
-	if s, err := auth.GetSessionByToken(ctx, s.oauth2_config, s.config.Introspect_Token_Url, s.skip_tls_verify); err != nil {
+	if s, err := auth.GetSessionByToken(s.rac, ctx, s.oauth2_config, s.config.Introspect_Token_Url, s.skip_tls_verify); err != nil {
 		return nil, err
 	} else {
 		u := &models.User{}
