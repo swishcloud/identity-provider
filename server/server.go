@@ -35,6 +35,7 @@ type Config struct {
 	Email                    Config_email `yaml:"email"`
 	Tls_cert_file            string       `yaml:"tls_cert_file"`
 	Tls_key_file             string       `yaml:"tls_key_file"`
+	Website_domain           string       `yaml:"website_domain"`
 }
 type Config_email struct {
 	Smtp_username string `yaml:"smtp_username"`

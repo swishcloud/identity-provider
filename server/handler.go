@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"html/template"
 	"io/ioutil"
-	"net"
 	"net/http"
 	"net/url"
 
@@ -77,12 +76,8 @@ func RegisterHandler(s *IDPServer) goweb.HandlerFunc {
 			return
 		}
 		s.GetStorage(ctx).AddUser(username, password, email)
-		host, port, err := net.SplitHostPort(ctx.Request.Host)
-		if err != nil {
-			panic(err)
-		}
 		user := s.GetStorage(ctx).GetUserByName(username)
-		activateAddr := global.GetUriString(host, port, Path_Email_Validate+"?email="+user.Email+"&code="+url.QueryEscape(*user.Email_activation_code), nil)
+		activateAddr := global.GetUriString(s.config.Website_domain, "80", Path_Email_Validate+"?email="+user.Email+"&code="+url.QueryEscape(*user.Email_activation_code), nil)
 		if send_email != "0" {
 			s.emailSender.SendEmail(user.Email, "邮箱激活", fmt.Sprintf("<html><body>"+
 				"%s，您好:<br/><br/>"+
