@@ -23,9 +23,11 @@ var db *sql.DB
 
 func NewSQLManager(db_conn_info string) *SQLManager {
 	if db == nil {
-		d, err := sql.Open("postgres", db_conn_info)
-		global.Panic(err)
-		db = d
+		if d, err := tx.NewDB("postgres", db_conn_info); err != nil {
+			panic(err)
+		} else {
+			db = d
+		}
 	}
 	tx, err := tx.NewTx(db)
 	if err != nil {
