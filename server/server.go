@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/swishcloud/gostudy/common"
 	"github.com/swishcloud/gostudy/email"
+	"github.com/swishcloud/gostudy/keygenerator"
 	"github.com/swishcloud/goweb"
 	"github.com/swishcloud/goweb/auth"
 	"github.com/swishcloud/identity-provider/global"
@@ -21,6 +23,8 @@ import (
 	"golang.org/x/oauth2"
 	"gopkg.in/yaml.v2"
 )
+
+const csrf_state_cookie_name = "crft_state"
 
 type Config struct {
 	HYDRA_HOST               string       `yaml:"hydra_host"`
@@ -192,7 +196,12 @@ func (s *IDPServer) Serve() {
 		login_challenge := ctx.Request.URL.Query().Get("login_challenge")
 		if login_challenge == "" {
 			//issue login request for the site itself
-			url := s.oauth2_config.AuthCodeURL("state-string", oauth2.AccessTypeOffline)
+			state, err := keygenerator.NewKey(20, false, false, false, false)
+			if err != nil {
+				panic(err)
+			}
+			state = base64.URLEncoding.EncodeToString([]byte(state))
+			url := s.oauth2_config.AuthCodeURL(state, oauth2.AccessTypeOffline)
 			http.Redirect(ctx.Writer, ctx.Request, url, 302)
 		} else {
 			//processing login request from thid-party website or the site itself
@@ -213,6 +222,14 @@ func (s *IDPServer) Serve() {
 				ctx.Writer.Write(b)
 				return
 			}
+			request_url, err := url.Parse(loginRes.Request_url)
+			if err != nil {
+				ctx.Writer.Write(b)
+				return
+			}
+			state := request_url.Query().Get("state")
+			cookie := http.Cookie{Name: csrf_state_cookie_name, Value: state, Path: "/"}
+			http.SetCookie(ctx.Writer, &cookie)
 			if err != nil {
 				panic(err)
 			}
@@ -225,6 +242,17 @@ func (s *IDPServer) Serve() {
 	})
 	s.engine.POST("/login", LoginHandler(s))
 	s.engine.GET("/login-callback", func(ctx *goweb.Context) {
+		state := ctx.Request.URL.Query().Get("state")
+		common.DelCookie(ctx.Writer, csrf_state_cookie_name)
+		if cookie, err := ctx.Request.Cookie(csrf_state_cookie_name); err != nil {
+			ctx.Failed("state cookie does not present")
+			return
+		} else {
+			if cookie.Value != state {
+				ctx.Failed("csrf verification failed")
+				return
+			}
+		}
 		code := ctx.Request.URL.Query().Get("code")
 		token, err := s.oauth2_config.Exchange(context.WithValue(context.Background(), "", s.httpClient), code)
 		if err != nil {
@@ -296,6 +324,7 @@ type HandlerWidget struct {
 }
 
 func (*HandlerWidget) Pre_Process(ctx *goweb.Context) {
+	log.Println("incomming request:", ctx.Request.URL.Path)
 }
 func (*HandlerWidget) Post_Process(ctx *goweb.Context) {
 	m := ctx.Data["storage"]

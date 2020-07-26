@@ -11,5 +11,6 @@ services:
       - POSTGRES_DB=hydra
     ports:
       - "5420:5432"
+    restart: always
 volumes:
   hydra_dbdata:

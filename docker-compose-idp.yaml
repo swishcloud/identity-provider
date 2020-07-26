@@ -1,0 +1,16 @@
+version: "3.7"
+services:
+  dev:
+    container_name: "idp-dev"
+    image: idp-dev
+    build:
+      context: ./.dist
+      dockerfile: ../docker/dockerfile
+    volumes:
+        - .cache/localhost.crt:/bin/app/.cache/localhost.crt
+        - .cache/localhost.key:/bin/app/.cache/localhost.key
+        - ./config.yaml:/bin/app/config.yaml
+    ports:
+        - 11109:11109
+    restart: always
+    command: serve --skip-tls-verify true

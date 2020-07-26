@@ -15,10 +15,10 @@ docker-compose -p identity-provider-project -f docker-compose-postgres-hydra.yam
 echo sleep 5 seconds for waiting brand-new database to run
 sleep 5
 #set environments for developmennt
-export HydraDSN=postgres://hydra:secret@192.168.100.8:5420/hydra?sslmode=disable \
-export IDPDSN=postgres://hydra:secret@192.168.100.8:5420/idp?sslmode=disable \
-export HydraPublicAddr=https://localhost:8010 \
-export IdentityProviderAddr=https://localhost:11109 \
+export HydraDSN=postgres://hydra:secret@${LOCAL_IP}:5420/hydra?sslmode=disable \
+export IDPDSN=postgres://hydra:secret@${LOCAL_IP}:5420/idp?sslmode=disable \
+export HydraPublicAddr=https://${LOCAL_IP}:8010 \
+export IdentityProviderAddr=https://${LOCAL_IP}:11109 \
 export SECRETS_SYSTEM_HYDRA=JWyB4HySJjACDuktN98Vv1R4GyOPfqta
 
 #running migrations
@@ -30,8 +30,8 @@ docker run -it --rm \
 docker run \
   --name ory-hydra \
   --network hydranetwork \
-  --rm \
   --detach \
+  --restart=always \
   -p 8010:4444 \
   -p 8009:4445 \
   -e SECRETS_SYSTEM=$SECRETS_SYSTEM_HYDRA \
@@ -46,9 +46,8 @@ docker run \
 #create database idp
 docker exec hydra-db psql -U hydra -c "CREATE DATABASE idp"
 #migrate idp database
-  export IMAGE_TAG=dev
-  ./docker/build.sh
-  docker run --rm $IMAGE_TAG migrate sql --conn_info=$IDPDSN
+./docker/build.sh
+docker run --rm idp migrate sql --conn_info=$IDPDSN
 #generate TLS certificate
 openssl req -newkey rsa:4096 \
 -x509 \

@@ -2,5 +2,5 @@ FROM alpine:3.7
 RUN apk add ca-certificates
 WORKDIR /bin/app/
 COPY . .
-ENTRYPOINT ["./app"]
-CMD ["--help"]
+ENTRYPOINT ["./idp"]
+CMD ["help"]
