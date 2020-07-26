@@ -5,6 +5,8 @@ import "github.com/swishcloud/identity-provider/storage/models"
 type Storage interface {
 	AddUser(username, password, email string)
 	DeleteUser()
+	ZeroLoginFailureNum(userId string)
+	IncreaseLoginFailureNum(userId string)
 	UpdateUser()
 	GetUsers()
 	GetUserByName(name string) *models.User

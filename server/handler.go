@@ -98,6 +98,9 @@ func RegisterSucceededHandler(s *IDPServer) goweb.HandlerFunc {
 }
 func loginAuthenticate(s storage.Storage, account, password string) (*models.User, error) {
 	user := s.GetUserByName(account)
+	if user.Failure_num > 4 {
+		return nil, errors.New("your account has been locked due to too much login failure numbers")
+	}
 	if user == nil {
 		return nil, errors.New("not found the user named " + account)
 	}
@@ -105,8 +108,14 @@ func loginAuthenticate(s storage.Storage, account, password string) (*models.Use
 		return nil, errors.New("your email not confirmed yet")
 	}
 	if !common.Md5Check(user.Password, password) {
-		return nil, errors.New("password not match")
+		s.IncreaseLoginFailureNum(user.Id)
+		if user.Failure_num+1 > 4 {
+			return nil, errors.New("your account has been locked due to too much login failure numbers")
+		} else {
+			return nil, errors.New("password not match")
+		}
 	}
+	s.ZeroLoginFailureNum(user.Id)
 	return user, nil
 }
 func LoginHandler(s *IDPServer) goweb.HandlerFunc {

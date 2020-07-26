@@ -329,11 +329,7 @@ func (*HandlerWidget) Pre_Process(ctx *goweb.Context) {
 func (*HandlerWidget) Post_Process(ctx *goweb.Context) {
 	m := ctx.Data["storage"]
 	if m != nil {
-		if ctx.Ok {
-			m.(storage.Storage).Commit()
-		} else {
-			m.(storage.Storage).Rollback()
-		}
+		m.(storage.Storage).Commit()
 	}
 
 	if ctx.Err != nil {
