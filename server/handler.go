@@ -102,17 +102,18 @@ func loginAuthenticate(s storage.Storage, account, password string) (*models.Use
 	max_password_failed_num := 5
 	lock_timeout := 5
 	user := s.GetUserByName(account)
-	if user.Lock_timestamp != nil {
-		minutes := (int)(time.Now().UTC().Sub(*user.Lock_timestamp).Minutes())
-		if minutes < lock_timeout {
-			return nil, errors.New("your account has been locked due to too much login failure numbers,you could try again afer " + strconv.Itoa(lock_timeout-minutes) + " minutes.")
-		} else {
-			s.ZeroLoginFailureNum(user.Id)
-			user = s.GetUserByName(account)
-		}
-	}
 	if user.Failure_num >= max_password_failed_num {
-		return nil, errors.New("this step could not have been reach if no exception,just double check it")
+		if user.Lock_timestamp != nil {
+			minutes := (int)(time.Now().UTC().Sub(*user.Lock_timestamp).Minutes())
+			if minutes < lock_timeout {
+				return nil, errors.New("your account has been locked due to too much login failure numbers,you could try again after " + strconv.Itoa(lock_timeout-minutes) + " minutes.")
+			} else {
+				s.ZeroLoginFailureNum(user.Id)
+				user = s.GetUserByName(account)
+			}
+		} else {
+			return nil, errors.New("this step could not have been reach if no exception,just double check why Lock_timestamp is NULL")
+		}
 	}
 	if user == nil {
 		return nil, errors.New("not found the user named " + account)
@@ -124,7 +125,7 @@ func loginAuthenticate(s storage.Storage, account, password string) (*models.Use
 		s.IncreaseLoginFailureNum(user.Id)
 		if user.Failure_num+1 >= max_password_failed_num {
 			s.UpdateLockTimestamp(user.Id)
-			return nil, errors.New("your account has been locked due to too much login failure numbers,you could try again afer " + strconv.Itoa(lock_timeout) + " minutes.")
+			return nil, errors.New("your account has been locked due to too much login failure numbers,you could try again after " + strconv.Itoa(lock_timeout) + " minutes.")
 		} else {
 			return nil, errors.New("password not match,you still have " + strconv.Itoa(max_password_failed_num-user.Failure_num-1) + " chances before getting locked")
 		}
