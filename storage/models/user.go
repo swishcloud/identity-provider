@@ -12,4 +12,5 @@ type User struct {
 	Email_activation_code *string   `json:"-"`
 	Token_valid_after     time.Time `json:"-"`
 	Failure_num           int
+	Lock_timestamp        *time.Time
 }

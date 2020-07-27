@@ -1,0 +1,1 @@
+ALTER TABLE public."user" ADD COLUMN lock_timestamp timestamp without time zone;

@@ -52,6 +52,9 @@ func (m *SQLManager) DeleteUser() {
 func (m *SQLManager) ZeroLoginFailureNum(userId string) {
 	m.Tx.MustExec("update public.\"user\" set failure_num=0 where id=$1", userId)
 }
+func (m *SQLManager) UpdateLockTimestamp(userId string) {
+	m.Tx.MustExec("update public.\"user\" set lock_timestamp=$1 where id=$2", time.Now().UTC(), userId)
+}
 func (m *SQLManager) IncreaseLoginFailureNum(userId string) {
 	m.Tx.MustExec("update public.\"user\" set failure_num=failure_num+1 where id=$1", userId)
 }
@@ -94,9 +97,9 @@ func (m *SQLManager) ChangePassword(id string, newPassword string) {
 	}
 }
 func (m *SQLManager) getUser(where string, args ...interface{}) *models.User {
-	r := m.Tx.QueryRow("select id,name,email,password,avatar,email_confirmed,email_activation_code,token_valid_after,failure_num from public.\"user\" "+where, args...)
+	r := m.Tx.QueryRow("select id,name,email,password,avatar,email_confirmed,email_activation_code,token_valid_after,failure_num,lock_timestamp from public.\"user\" "+where, args...)
 	user := models.User{}
-	err := r.Scan(&user.Id, &user.Name, &user.Email, &user.Password, &user.Avatar, &user.Email_confirmed, &user.Email_activation_code, &user.Token_valid_after, &user.Failure_num)
+	err := r.Scan(&user.Id, &user.Name, &user.Email, &user.Password, &user.Avatar, &user.Email_confirmed, &user.Email_activation_code, &user.Token_valid_after, &user.Failure_num, &user.Lock_timestamp)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil

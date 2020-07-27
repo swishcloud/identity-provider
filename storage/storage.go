@@ -6,6 +6,7 @@ type Storage interface {
 	AddUser(username, password, email string)
 	DeleteUser()
 	ZeroLoginFailureNum(userId string)
+	UpdateLockTimestamp(userId string)
 	IncreaseLoginFailureNum(userId string)
 	UpdateUser()
 	GetUsers()
