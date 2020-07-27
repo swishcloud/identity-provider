@@ -129,6 +129,7 @@ func loginAuthenticate(s storage.Storage, account, password string) (*models.Use
 			return nil, errors.New("password not match,you still have " + strconv.Itoa(max_password_failed_num-user.Failure_num-1) + " chances before getting locked")
 		}
 	}
+	s.ZeroLoginFailureNum(user.Id)
 	return user, nil
 }
 func LoginHandler(s *IDPServer) goweb.HandlerFunc {
