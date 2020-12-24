@@ -102,6 +102,9 @@ func loginAuthenticate(s storage.Storage, account, password string) (*models.Use
 	max_password_failed_num := 5
 	lock_timeout := 5
 	user := s.GetUserByName(account)
+	if user == nil {
+		return nil, errors.New("not found the user.")
+	}
 	if user.Failure_num >= max_password_failed_num {
 		if user.Lock_timestamp != nil {
 			minutes := (int)(time.Now().UTC().Sub(*user.Lock_timestamp).Minutes())
