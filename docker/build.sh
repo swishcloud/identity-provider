@@ -1,4 +1,7 @@
 #/bin/sh
+if [ ! -d .cache ];then
+mkdir .cache
+fi
 if [ -z $REPO ]
 then
 REPO='idp'
@@ -16,4 +19,4 @@ cp templates  ./.dist -r
 cp static  ./.dist -r
 cp migrations  ./.dist -r
 #buiding
-docker build --tag $REPO:$TAG --tag $REPO -f docker/dockerfile ./.dist
+sudo docker build --tag $REPO:$TAG --tag $REPO -f docker/dockerfile ./.dist

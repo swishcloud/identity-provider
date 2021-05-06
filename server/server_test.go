@@ -9,7 +9,7 @@ import (
 	"github.com/swishcloud/identity-provider/storage"
 )
 
-const config_path = "/workspace/go/src/github.com/swishcloud/identity-provider/config.yaml"
+const config_path = "../config.yaml"
 
 func TestRegisterHandler(t *testing.T) {
 	s := NewIDPServer(config_path, true)

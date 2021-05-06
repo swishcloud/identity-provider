@@ -1,4 +1,4 @@
-hydra_host: "192.168.1.1"
+hydra_host: "192.168.29.3"
 hydra_public_port: 8010
 hydra_admin_port: 8009
 listen_address: "0.0.0.0:11109"
@@ -6,9 +6,9 @@ website_name: "IDP"
 website_domain: "website_domain"
 website_port: 443
 secret: "IDENTITY_PROVIDER_SECRET"
-db_conn_info: "postgres://hydra:secret@192.168.1.1:5420/idp?sslmode=disable"
-post_logout_redirect_uri: "https://192.168.1.1:11109/login"
-introspect_token_url: "https://192.168.1.1:11109/api/introspect-token"
+db_conn_info: "postgres://hydra:secret@192.168.29.3:5420/idp?sslmode=disable"
+post_logout_redirect_uri: "https://192.168.29.3:11109/login"
+introspect_token_url: "https://192.168.29.3:11109/api/introspect-token"
 email:
 tls_cert_file: .cache/localhost.crt
 tls_key_file: .cache/localhost.key

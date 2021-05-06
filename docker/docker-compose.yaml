@@ -1,0 +1,11 @@
+version: "3.9"
+services:
+    IDP:
+        image: "idp:latest"
+        volumes:
+            - ../config.yaml:/bin/app/config.yaml
+            - ../.cache:/bin/app/.cache
+        restart: always
+        command: ["serve", "--skip-tls-verify", "true"]
+        ports:
+            - 11109:11109
