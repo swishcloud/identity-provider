@@ -8,6 +8,11 @@ export HydraAdminAddr=https://$LOCAL_IP:8009
 sudo docker run --rm -it \
  -e HYDRA_ADMIN_URL=$HydraAdminAddr \
  oryd/hydra:v1.0.8 \
+ clients delete GOBLOG --skip-tls-verify 
+
+sudo docker run --rm -it \
+ -e HYDRA_ADMIN_URL=$HydraAdminAddr \
+ oryd/hydra:v1.0.8 \
  clients create --skip-tls-verify \
  --id GOBLOG \
  --secret GOBLOGSECRET \
@@ -43,6 +48,7 @@ sudo docker run --rm -it \
  -e HYDRA_ADMIN_URL=$HydraAdminAddr \
  oryd/hydra:v1.0.8 \
  clients delete FILESYNC_WEB --skip-tls-verify 
+
 sudo docker run --rm -it \
  -e HYDRA_ADMIN_URL=$HydraAdminAddr \
  oryd/hydra:v1.0.8 \
@@ -60,6 +66,7 @@ sudo docker run --rm -it \
  -e HYDRA_ADMIN_URL=$HydraAdminAddr \
  oryd/hydra:v1.0.8 \
  clients delete FILESYNC_MOBILE --skip-tls-verify 
+ 
 sudo docker run --rm -it \
  -e HYDRA_ADMIN_URL=$HydraAdminAddr \
  oryd/hydra:v1.0.8 \
