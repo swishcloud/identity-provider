@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -242,18 +243,10 @@ func (s *IDPServer) Serve() {
 	})
 	s.engine.POST("/login", LoginHandler(s))
 	s.engine.GET("/login-callback", func(ctx *goweb.Context) {
-		state := ctx.Request.URL.Query().Get("state")
-		common.DelCookie(ctx.Writer, csrf_state_cookie_name)
-		if cookie, err := ctx.Request.Cookie(csrf_state_cookie_name); err != nil {
-			ctx.Failed("state cookie does not present")
-			return
-		} else {
-			if cookie.Value != state {
-				ctx.Failed("csrf verification failed")
-				return
-			}
+		code, err := get_code(ctx)
+		if err != nil {
+			panic(err)
 		}
-		code := ctx.Request.URL.Query().Get("code")
 		token, err := s.oauth2_config.Exchange(context.WithValue(context.Background(), "", s.httpClient), code)
 		if err != nil {
 			ctx.Writer.Write([]byte(err.Error()))
@@ -318,6 +311,20 @@ func (s *IDPServer) Serve() {
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+func get_code(ctx *goweb.Context) (string, error) {
+	state := ctx.Request.URL.Query().Get("state")
+	common.DelCookie(ctx.Writer, csrf_state_cookie_name)
+	if cookie, err := ctx.Request.Cookie(csrf_state_cookie_name); err != nil {
+		return "", errors.New("state cookie does not present")
+	} else {
+		if cookie.Value != state {
+			return "", errors.New("csrf verification failed")
+		}
+	}
+	code := ctx.Request.URL.Query().Get("code")
+	return code, nil
 }
 
 type HandlerWidget struct {

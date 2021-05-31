@@ -31,7 +31,10 @@ const (
 
 func ApprovalNativeAppHandler(s *IDPServer) goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
-		code := ctx.Request.URL.Query().Get("code")
+		code, err := get_code(ctx)
+		if err != nil {
+			panic(err)
+		}
 		ctx.RenderPage(s.newPageModel(ctx, code), "templates/layout.html", "templates/approvalnativeapp.html")
 	}
 }
