@@ -232,7 +232,7 @@ func introspectTokenMiddleware(s *IDPServer) goweb.HandlerFunc {
 		if auth.HasLoggedIn(s.rac, ctx, s.oauth2_config, s.config.Introspect_Token_Url, s.skip_tls_verify) {
 			ctx.Next()
 		} else {
-			ctx.Writer.WriteHeader(http.StatusUnauthorized)
+			http.Redirect(ctx.Writer, ctx.Request, "/login", http.StatusFound)
 		}
 	}
 }
@@ -242,6 +242,9 @@ func AcceptLogin(s *IDPServer, ctx *goweb.Context, login_challenge string, user 
 	body.Remember = true
 	body.Remember_for = 60 * 5
 	b, err := json.Marshal(body)
+	if err != nil {
+		panic(err)
+	}
 	parameters := url.Values{}
 	parameters.Add("login_challenge", login_challenge)
 	rar := common.NewRestApiRequest("PUT", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, LoginPath+"/accept", parameters), b)
