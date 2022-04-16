@@ -13,7 +13,7 @@ function detectError(){
 sudo docker rm -f ory-hydra
 sudo docker rm -f hydra-postgres
 #set up and run database for hydra
-sudo docker-compose -p identity-provider-project -f docker-compose-postgres-hydra.yaml up -d
+sudo docker compose -p identity-provider-project -f docker-compose-postgres-hydra.yaml up -d
 echo sleep 5 seconds for waiting brand-new database to run
 sleep 5
 #set environments for developmennt
@@ -28,11 +28,12 @@ echo the network aready exists
 else
 sudo docker network create hydranetwork
 fi
-#running migrations
+echo "running migrations"
 sudo docker run -it --rm \
   --network hydranetwork \
   oryd/hydra:v1.0.8 \
   migrate sql --yes $HydraDSN
+echo "finished migrations"
 #run the hydra server
 sudo docker run \
   --name ory-hydra \

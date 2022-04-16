@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/swishcloud/gostudy/common"
+	"github.com/swishcloud/gostudy/keygenerator"
 	"github.com/swishcloud/identity-provider/global"
 	"github.com/swishcloud/identity-provider/internal"
 	"github.com/swishcloud/identity-provider/storage"
@@ -27,6 +28,7 @@ const (
 	Path_Register_Succeeded = "/register-succeeded"
 	Path_Change_Password    = "/change-password"
 	Path_User_Info          = "/user_info"
+	Path_Password_Reset     = "/password_reset"
 )
 
 func ApprovalNativeAppHandler(s *IDPServer) goweb.HandlerFunc {
@@ -41,7 +43,8 @@ func ApprovalNativeAppHandler(s *IDPServer) goweb.HandlerFunc {
 func ChangePasswordHandler(s *IDPServer) goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
 		if ctx.Request.Method == "GET" {
-			ctx.RenderPage(s.newPageModel(ctx, nil), "templates/layout.html", "templates/change_password.html")
+			email := ctx.Request.Form.Get("EMAIL")
+			ctx.RenderPage(s.newPageModel(ctx, email), "templates/layout.html", "templates/change_password.html")
 		} else {
 			password := ctx.Request.PostForm.Get("password")
 			confirmPassword := ctx.Request.PostForm.Get("confirmPassword")
@@ -53,11 +56,78 @@ func ChangePasswordHandler(s *IDPServer) goweb.HandlerFunc {
 			}
 			user, err := s.GetLoginUser(ctx)
 			if err != nil {
+				email := ctx.Request.Form.Get("EMAIL")
+				for _, cookie := range ctx.Request.Cookies() {
+					if cookie.Name == "vc" {
+						if ok, err := check_verification_code(s.GetStorage(ctx), email, cookie.Value); ok && err == nil {
+							user = s.GetStorage(ctx).GetUserByEmail(email)
+						}
+						break
+					}
+				}
+			}
+			if user == nil {
 				panic("login is invalid")
 			}
 			s.invalidateLoginSession(user.Id)
 			s.GetStorage(ctx).ChangePassword(user.Id, password)
 			ctx.Success(Path_Login)
+		}
+	}
+}
+func PasswordResetHandler(s *IDPServer) goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		if ctx.Request.Method == "GET" {
+			email := ctx.Request.Form.Get("EMAIL")
+			code := ctx.Request.Form.Get("CODE")
+			if email != "" && code != "" {
+				user := s.GetStorage(ctx).GetUserByEmail(email)
+				if user == nil {
+					panic("the user does not exist")
+				}
+				//third step
+				if ok, err := check_verification_code(s.GetStorage(ctx), email, code); !ok || err != nil {
+					panic("the link is invalid")
+				}
+				//update code again
+				verification_code, err := keygenerator.NewKey(50, false, false, false, true)
+				if err != nil {
+					panic(err)
+				}
+				s.GetStorage(ctx).UpdateUserVerificationCode(user.Id, &verification_code)
+				cookie := &http.Cookie{
+					Name:  "vc",
+					Value: verification_code,
+				}
+				http.SetCookie(ctx.Writer, cookie)
+				ctx.RenderPage(s.newPageModel(ctx, email), "templates/layout.html", "templates/change_password.html")
+			} else {
+				//first step
+				ctx.RenderPage(s.newPageModel(ctx, nil), "templates/layout.html", "templates/password_reset.html")
+			}
+		} else {
+			//second step
+			email := ctx.Request.Form.Get("email")
+			user := s.GetStorage(ctx).GetUserByEmail(email)
+			if user == nil {
+				panic("the user does not exist!")
+			}
+			verification_code, err := keygenerator.NewKey(50, false, false, false, true)
+			if err != nil {
+				panic(err)
+			}
+			s.GetStorage(ctx).UpdateUserVerificationCode(user.Id, &verification_code)
+			parameters := url.Values{}
+			parameters.Add("EMAIL", email)
+			parameters.Add("CODE", verification_code)
+			reset_url := "https://" + s.config.Website_domain + Path_Password_Reset + "?" + parameters.Encode()
+			s.emailSender.SendEmail(user.Email, "RESET PASSWORD", fmt.Sprintf("<html><body>"+
+				"Hello %s，<br/><br/>"+
+				"Please click the following url link to reset your password：<br/><br/>"+
+				"<a href='%s'>%s</a><br/><br/>"+
+				"If you failed to open the above link，please copy it and paste in browser to directly access, thanks!", user.Name, reset_url, reset_url)+
+				"</body></html>", s.config.Email.Plain)
+			ctx.Success(nil)
 		}
 	}
 }
@@ -89,7 +159,7 @@ func RegisterHandler(s *IDPServer) goweb.HandlerFunc {
 				"感谢您注册%s,您的登录邮箱为%s,请点击以下链接激活您的邮箱地址：<br/><br/>"+
 				"<a href='%s'>%s</a><br/><br/>"+
 				"如果以上链接无法访问，请将该网址复制并粘贴至浏览器窗口中直接访问。", user.Name, s.config.WEBSITE_NAME, user.Email, activateAddr, activateAddr)+
-				"</body></html>")
+				"</body></html>", s.config.Email.Plain)
 		}
 		ctx.Success(struct {
 			RedirectUri string `json:"redirectUri"`
@@ -124,6 +194,7 @@ func loginAuthenticate(s storage.Storage, account, password string) (*models.Use
 	if user == nil {
 		return nil, errors.New("not found the user named " + account)
 	}
+	s.UpdateUserVerificationCode(user.Id, nil)
 	if !user.Email_confirmed {
 		return nil, errors.New("your email not confirmed yet")
 	}
@@ -277,6 +348,20 @@ type pageModel struct {
 	PageTitle        string
 }
 
+func check_verification_code(storage storage.Storage, email string, verification_code string) (bool, error) {
+	user := storage.GetUserByEmail(email)
+	if user == nil || user.Verification_code == nil || user.Verification_code_update_timestamp == nil || *user.Verification_code != verification_code {
+		return false, errors.New("the email or verification code is invalid")
+	}
+	diff := time.Now().UTC().Sub(*user.Verification_code_update_timestamp).Minutes()
+	if diff > 5 {
+		return false, errors.New("the verification code has expired")
+	} else if diff < 0 {
+		return false, errors.New("the verification code update timestamp is INVALID")
+	}
+	storage.UpdateUserVerificationCode(user.Id, nil)
+	return true, nil
+}
 func (s *IDPServer) GetLoginUser(ctx *goweb.Context) (*models.User, error) {
 	if s, err := auth.GetSessionByToken(s.rac, ctx, s.oauth2_config, s.config.Introspect_Token_Url, s.skip_tls_verify); err != nil {
 		return nil, err

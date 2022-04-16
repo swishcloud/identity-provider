@@ -60,6 +60,12 @@ func (m *SQLManager) IncreaseLoginFailureNum(userId string) {
 }
 func (m *SQLManager) UpdateUser() {
 }
+func (m *SQLManager) UpdateUserVerificationCode(userId string, verification_code *string) {
+	r := m.Tx.MustExec("update public.\"user\" set verification_code=$1,verification_code_update_timestamp=$2 where id=$3", verification_code, time.Now().UTC(), userId)
+	if n, _ := r.RowsAffected(); n != 1 {
+		panic("UpdateUserVerificationCode failed")
+	}
+}
 func (m *SQLManager) GetUsers() {
 }
 func (m *SQLManager) EmailValidate(email, code string) {
@@ -97,9 +103,9 @@ func (m *SQLManager) ChangePassword(id string, newPassword string) {
 	}
 }
 func (m *SQLManager) getUser(where string, args ...interface{}) *models.User {
-	r := m.Tx.QueryRow("select id,name,email,password,avatar,email_confirmed,email_activation_code,token_valid_after,failure_num,lock_timestamp from public.\"user\" "+where, args...)
+	r := m.Tx.QueryRow("select id,name,email,password,avatar,email_confirmed,email_activation_code,verification_code,Verification_code_update_timestamp,token_valid_after,failure_num,lock_timestamp from public.\"user\" "+where, args...)
 	user := models.User{}
-	err := r.Scan(&user.Id, &user.Name, &user.Email, &user.Password, &user.Avatar, &user.Email_confirmed, &user.Email_activation_code, &user.Token_valid_after, &user.Failure_num, &user.Lock_timestamp)
+	err := r.Scan(&user.Id, &user.Name, &user.Email, &user.Password, &user.Avatar, &user.Email_confirmed, &user.Email_activation_code, &user.Verification_code, &user.Verification_code_update_timestamp, &user.Token_valid_after, &user.Failure_num, &user.Lock_timestamp)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil

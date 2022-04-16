@@ -9,7 +9,9 @@ type Storage interface {
 	UpdateLockTimestamp(userId string)
 	IncreaseLoginFailureNum(userId string)
 	UpdateUser()
+	UpdateUserVerificationCode(userId string, verification_code *string)
 	GetUsers()
+	GetUserByEmail(email string) *models.User
 	GetUserByName(name string) *models.User
 	GetUserById(name string) *models.User
 	Commit()
