@@ -85,18 +85,16 @@ func PasswordResetHandler(s *IDPServer) goweb.HandlerFunc {
 				if user == nil {
 					panic("the user does not exist")
 				}
-				//third step, the reset password url is accessed
-				if ok, err := check_verification_code(s.GetStorage(ctx), email, code, internal.VC_LENGTH_PASSWORD_RESET_FORM); !ok || err != nil {
-					panic("the link is invalid")
-				}
-				var cookie_code string
+				var vc string
 				for _, cookie := range ctx.Request.Cookies() {
 					if cookie.Name == "vc" {
-						cookie_code = cookie.Value
+						vc = cookie.Value
 						break
 					}
 				}
-				if cookie_code != code {
+				code = vc + code
+				//third step, the reset password url is accessed
+				if ok, err := check_verification_code(s.GetStorage(ctx), email, code, internal.VC_LENGTH_PASSWORD_RESET_FORM); !ok || err != nil {
 					panic("the link is invalid")
 				}
 				//update code again
@@ -116,7 +114,7 @@ func PasswordResetHandler(s *IDPServer) goweb.HandlerFunc {
 				ctx.RenderPage(s.newPageModel(ctx, nil), "templates/layout.html", "templates/password_reset.html")
 			}
 		} else {
-			//second step
+			//second step, send reset password url link
 			email := ctx.Request.Form.Get("email")
 			user := s.GetStorage(ctx).GetUserByEmail(email)
 			if user == nil {
@@ -132,12 +130,12 @@ func PasswordResetHandler(s *IDPServer) goweb.HandlerFunc {
 			s.GetStorage(ctx).UpdateUserVerificationCode(user.Id, &verification_code)
 			cookie := &http.Cookie{
 				Name:  "vc",
-				Value: verification_code,
+				Value: verification_code[:10],
 			}
 			http.SetCookie(ctx.Writer, cookie)
 			parameters := url.Values{}
 			parameters.Add("EMAIL", email)
-			parameters.Add("CODE", verification_code)
+			parameters.Add("CODE", verification_code[10:50])
 			reset_url := "https://" + s.config.Website_domain + Path_Password_Reset + "?" + parameters.Encode()
 			s.emailSender.SendEmail(user.Email, "RESET PASSWORD", fmt.Sprintf("<html><body>"+
 				"Hello %s，<br/><br/>"+
@@ -368,7 +366,11 @@ type pageModel struct {
 
 func check_verification_code(storage storage.Storage, email string, verification_code string, length int) (bool, error) {
 	user := storage.GetUserByEmail(email)
-	if user == nil || user.Verification_code == nil || user.Verification_code_update_timestamp == nil || *user.Verification_code != verification_code {
+	if user == nil {
+		return false, errors.New("the email does not exists")
+	}
+	storage.UpdateUserVerificationCode(user.Id, nil)
+	if user.Verification_code == nil || user.Verification_code_update_timestamp == nil || *user.Verification_code != verification_code {
 		return false, errors.New("the email or verification code is invalid")
 	}
 	if len(verification_code) != length {
@@ -380,7 +382,6 @@ func check_verification_code(storage storage.Storage, email string, verification
 	} else if diff < 0 {
 		return false, errors.New("the verification code update timestamp is INVALID")
 	}
-	storage.UpdateUserVerificationCode(user.Id, nil)
 	return true, nil
 }
 func (s *IDPServer) GetLoginUser(ctx *goweb.Context) (*models.User, error) {
