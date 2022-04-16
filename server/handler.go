@@ -59,7 +59,7 @@ func ChangePasswordHandler(s *IDPServer) goweb.HandlerFunc {
 				email := ctx.Request.Form.Get("EMAIL")
 				for _, cookie := range ctx.Request.Cookies() {
 					if cookie.Name == "vc" {
-						if ok, err := check_verification_code(s.GetStorage(ctx), email, cookie.Value); ok && err == nil {
+						if ok, err := check_verification_code(s.GetStorage(ctx), email, cookie.Value, internal.VC_LENGTH_PASSWORD_RESET); ok && err == nil {
 							user = s.GetStorage(ctx).GetUserByEmail(email)
 						}
 						break
@@ -85,12 +85,22 @@ func PasswordResetHandler(s *IDPServer) goweb.HandlerFunc {
 				if user == nil {
 					panic("the user does not exist")
 				}
-				//third step
-				if ok, err := check_verification_code(s.GetStorage(ctx), email, code); !ok || err != nil {
+				//third step, the reset password url is accessed
+				if ok, err := check_verification_code(s.GetStorage(ctx), email, code, internal.VC_LENGTH_PASSWORD_RESET_FORM); !ok || err != nil {
+					panic("the link is invalid")
+				}
+				var cookie_code string
+				for _, cookie := range ctx.Request.Cookies() {
+					if cookie.Name == "vc" {
+						cookie_code = cookie.Value
+						break
+					}
+				}
+				if cookie_code != code {
 					panic("the link is invalid")
 				}
 				//update code again
-				verification_code, err := keygenerator.NewKey(50, false, false, false, true)
+				verification_code, err := keygenerator.NewKey(internal.VC_LENGTH_PASSWORD_RESET, false, false, false, true)
 				if err != nil {
 					panic(err)
 				}
@@ -115,11 +125,16 @@ func PasswordResetHandler(s *IDPServer) goweb.HandlerFunc {
 			if !user.Email_confirmed {
 				panic("your email is registered but not confirmed yet, please check your email box")
 			}
-			verification_code, err := keygenerator.NewKey(50, false, false, false, true)
+			verification_code, err := keygenerator.NewKey(internal.VC_LENGTH_PASSWORD_RESET_FORM, false, false, false, true)
 			if err != nil {
 				panic(err)
 			}
 			s.GetStorage(ctx).UpdateUserVerificationCode(user.Id, &verification_code)
+			cookie := &http.Cookie{
+				Name:  "vc",
+				Value: verification_code,
+			}
+			http.SetCookie(ctx.Writer, cookie)
 			parameters := url.Values{}
 			parameters.Add("EMAIL", email)
 			parameters.Add("CODE", verification_code)
@@ -351,10 +366,13 @@ type pageModel struct {
 	PageTitle        string
 }
 
-func check_verification_code(storage storage.Storage, email string, verification_code string) (bool, error) {
+func check_verification_code(storage storage.Storage, email string, verification_code string, length int) (bool, error) {
 	user := storage.GetUserByEmail(email)
 	if user == nil || user.Verification_code == nil || user.Verification_code_update_timestamp == nil || *user.Verification_code != verification_code {
 		return false, errors.New("the email or verification code is invalid")
+	}
+	if len(verification_code) != length {
+		return false, errors.New("the verification code has expired")
 	}
 	diff := time.Now().UTC().Sub(*user.Verification_code_update_timestamp).Minutes()
 	if diff > 5 {
