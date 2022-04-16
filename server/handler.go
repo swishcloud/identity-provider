@@ -112,6 +112,9 @@ func PasswordResetHandler(s *IDPServer) goweb.HandlerFunc {
 			if user == nil {
 				panic("the user does not exist!")
 			}
+			if !user.Email_confirmed {
+				panic("your email is registered but not confirmed yet, please check your email box")
+			}
 			verification_code, err := keygenerator.NewKey(50, false, false, false, true)
 			if err != nil {
 				panic(err)
