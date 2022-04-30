@@ -9,26 +9,36 @@
     <form method="post" class="col-lg-4" id="loginForm">
         <div id="error">
         </div>
-        <div class="form-group">
-            <label for="account">账号</label>
-            <input type="text" class="form-control" id="account" name="account" placeholder="用户名/邮箱" required>
+        <div id="divScanLogin" class="d-md-none">
+            <div class="form-group">
+                <label for="account">账号</label>
+                <input type="text" class="form-control" id="account" name="account" placeholder="用户名/邮箱" required>
+            </div>
+            <div class="form-group">
+                <label for="password">密码</label>
+                <input type="password" class="form-control" id="password" name="password" placeholder="密码" required
+                    autocomplete="">
+            </div>
+            <button id="login" type="submit" class="btn btn-primary">登录</button>
         </div>
-        <div class="form-group">
-            <label for="password">密码</label>
-            <input type="password" class="form-control" id="password" name="password" placeholder="密码" required
-                autocomplete="">
+        <div id="divPwdLogin" class="d-none d-md-block">
+            <h4>扫码登录</h4>
+            <img src="/qr_code?str={{.}}" style="width: 200px;height:200px;" />
         </div>
-        <button id="login" type="submit" class="btn btn-primary">登录</button>
-        <p class="mt-2">没有账号?
-            <a class="btn-link mr-2" href="/register">马上注册</a>
-            <a class="btn-link" href="/password_reset">忘记密码？</a>
-        </p>
+        <div class="mt-2">
+            <a id="switchLoginMethod" class="btn-link mr-2" href="#">密码登录</a>
+            <a class="btn-link" href="/password_reset">忘记密码</a>
+        </div>
+        <div class="mt-2">没有账号?
+            <a class="btn-link" href="/register">马上注册</a>
+        </div>
     </form>
 </div>
 {{end}}
 
 {{define "scripts"}}
 <script>
+    loginMethod = 1
     app.ajaxSubmit($("form:last"), {
         before: function () {
             app.closeError($('#error'))
@@ -45,5 +55,46 @@
             }
         }
     })
+
+    $("#switchLoginMethod").on("click", function () {
+        if (loginMethod == 1) {
+            loginMethod = 2
+            $("#divPwdLogin").removeClass("d-md-block")
+            $("#divScanLogin").removeClass("d-md-none")
+            $(this).text("扫码登录")
+        } else {
+            loginMethod = 1
+            $("#divPwdLogin").addClass("d-md-block")
+            $("#divScanLogin").addClass("d-md-none")
+            $(this).text("密码登录")
+        }
+    })
+
+    // Create WebSocket connection.
+    const socket = new WebSocket('wss://' + location.host + '/ws');
+
+    // Connection opened
+    socket.addEventListener('open', function (event) {
+        socket.send('login_challenge:{{.}}');
+        console.log('Connection opened')
+    });
+
+    // Listen for messages
+    socket.addEventListener('message', function (event) {
+        console.log('Message from server ', event.data);
+        if (event.data == "hello") {
+            console.log("challenge is accepted")
+        }
+        $.post("/login", { login_challenge: "{{.}}", key: event.data }, function (res) {
+            window.location.href = res.data
+        });
+
+    });
+    socket.addEventListener('close', function (event) {
+        console.log('a websocket is closed')
+    });
+    socket.addEventListener('error', function (event) {
+        console.log('a websocket has been closed because of an error')
+    });
 </script>
 {{end}}

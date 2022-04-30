@@ -56,7 +56,7 @@ sudo docker exec hydra-db psql -U hydra -c "CREATE DATABASE idp"|| true
 #migrate idp database
 ./docker/build.sh
 sudo docker run --rm idp migrate sql --conn_info=$IDPDSN||true
-#generate TLS certificate
+#generate TLS certificate  
 openssl req -newkey rsa:4096 \
 -x509 \
 -sha256 \
@@ -64,5 +64,5 @@ openssl req -newkey rsa:4096 \
 -nodes \
 -out .cache/localhost.crt \
 -keyout .cache/localhost.key \
--subj "/C=CH/ST=GUANGDNG/L=SHENZHEN/O=SECURITY/OU=IT DEPARTMENT/CN=localhost"
+-subj "/C=CH/ST=GUANGDNG/L=SHENZHEN/O=SECURITY/OU=IT DEPARTMENT/CN=$LOCAL_IP:8010"
 #run docker container for idp

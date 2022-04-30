@@ -7,13 +7,18 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image/png"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
 	"regexp"
 	"strings"
+	"time"
 
+	"github.com/boombuler/barcode"
+	"github.com/boombuler/barcode/qr"
+	"github.com/gorilla/websocket"
 	"github.com/swishcloud/gostudy/common"
 	"github.com/swishcloud/gostudy/email"
 	"github.com/swishcloud/gostudy/keygenerator"
@@ -21,6 +26,7 @@ import (
 	"github.com/swishcloud/goweb/auth"
 	"github.com/swishcloud/identity-provider/global"
 	"github.com/swishcloud/identity-provider/storage"
+	"github.com/swishcloud/identity-provider/storage/models"
 	"golang.org/x/oauth2"
 	"gopkg.in/yaml.v2"
 )
@@ -58,10 +64,13 @@ type IDPServer struct {
 	httpClient      *http.Client
 	rac             *common.RestApiClient
 	skip_tls_verify bool
+	wsHub           *WebSocketHub
 }
 
 func NewIDPServer(configPath string, skip_tls_verify bool) *IDPServer {
 	s := &IDPServer{}
+	s.wsHub = newWebSocketHub()
+	go s.wsHub.run()
 	s.skip_tls_verify = skip_tls_verify
 	s.httpClient = &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: skip_tls_verify}}}
 	http.DefaultClient = s.httpClient
@@ -129,6 +138,7 @@ func (s *IDPServer) Serve() {
 	api_group := s.engine.Group()
 	api_group.Use(apiMiddleware(s))
 	api_group.GET(Path_User_Info, userInfoHandler(s))
+	api_group.POST(Path_Login_Acceptance, loginAcceptanceHandler(s))
 	privileged_g := s.engine.Group()
 	privileged_g.Use(introspectTokenMiddleware(s))
 	privileged_g.GET("/", func(ctx *goweb.Context) {
@@ -158,8 +168,7 @@ func (s *IDPServer) Serve() {
 		body := HydraConsentAcceptBody{}
 		body.Grant_access_token_audience = res.Requested_access_token_audience
 		body.Grant_scope = res.Requested_scope
-		body.Remember = true
-		body.Remember_for = 60 * 30
+		body.Remember = false
 		body.Session = HydraConsentAcceptBodySession{Id_token: map[string]interface{}{"name": user.Name, "avatar": user.Avatar, "email": user.Email}}
 		b, err = json.Marshal(body)
 		if err != nil {
@@ -196,6 +205,9 @@ func (s *IDPServer) Serve() {
 	s.engine.GET(Path_Register_Succeeded, RegisterSucceededHandler(s))
 	s.engine.GET(Path_Change_Password, ChangePasswordHandler(s))
 	s.engine.POST(Path_Change_Password, ChangePasswordHandler(s))
+	s.engine.GET("/ws", func(ctx *goweb.Context) {
+		serveWs(s.wsHub, ctx.Writer.ResponseWriter, ctx.Request)
+	})
 	s.engine.GET("/login", func(ctx *goweb.Context) {
 		login_challenge := ctx.Request.URL.Query().Get("login_challenge")
 		if login_challenge == "" {
@@ -240,9 +252,24 @@ func (s *IDPServer) Serve() {
 			if loginRes.Skip {
 				AcceptLogin(s, ctx, login_challenge, *(s.GetStorage(ctx).GetUserById(loginRes.Subject)))
 			} else {
-				ctx.RenderPage(s.newPageModel(ctx, nil), "templates/layout.html", "templates/login.html")
+				scan_login := true
+				if loginRes.Client.Client_id == "FILESYNC_MOBILE" {
+					scan_login = false
+				}
+				scan_login = false
+				if scan_login {
+					ctx.RenderPage(s.newPageModel(ctx, login_challenge), "templates/layout.html", "templates/scan-login.html")
+				} else {
+					ctx.RenderPage(s.newPageModel(ctx, login_challenge), "templates/layout.html", "templates/login.html")
+				}
 			}
 		}
+	})
+	s.engine.GET("/qr_code", func(ctx *goweb.Context) {
+		str := ctx.Request.FormValue("str")
+		qrCode, _ := qr.Encode(str, qr.L, qr.Auto)
+		qrCode, _ = barcode.Scale(qrCode, 300, 300)
+		png.Encode(ctx.Writer, qrCode)
 	})
 	s.engine.POST("/login", LoginHandler(s))
 	s.engine.GET("/login-callback", func(ctx *goweb.Context) {
@@ -255,7 +282,7 @@ func (s *IDPServer) Serve() {
 			ctx.Writer.Write([]byte(err.Error()))
 			return
 		}
-		auth.Login(ctx, token, global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_PUBLIC_PORT, jwk_json_path, nil))
+		auth.Login(ctx, token, global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_PUBLIC_PORT, jwk_json_path, nil), nil)
 		http.Redirect(ctx.Writer, ctx.Request, "/", 302)
 	})
 	s.engine.GET("/logout", func(ctx *goweb.Context) {
@@ -351,3 +378,181 @@ func (*HandlerWidget) Post_Process(ctx *goweb.Context) {
 		}
 	}
 }
+
+type WebSocketMessage struct {
+	to      *WebSocketClient
+	message []byte
+}
+type WebSocketHub struct {
+	// Registered clients.
+	clients  map[*WebSocketClient]bool
+	messages chan *WebSocketMessage
+
+	// Register requests from the clients.
+	register chan *WebSocketClient
+
+	// Unregister requests from clients.
+	unregister chan *WebSocketClient
+}
+
+func newWebSocketHub() *WebSocketHub {
+	return &WebSocketHub{
+		clients:    make(map[*WebSocketClient]bool),
+		messages:   make(chan *WebSocketMessage),
+		register:   make(chan *WebSocketClient),
+		unregister: make(chan *WebSocketClient),
+	}
+}
+func (h *WebSocketHub) run() {
+	for {
+		select {
+		case client := <-h.register:
+			h.clients[client] = true
+		case client := <-h.unregister:
+			if _, ok := h.clients[client]; ok {
+				delete(h.clients, client)
+				close(client.send)
+			}
+		case message := <-h.messages:
+			client := message.to
+			if _, ok := h.clients[client]; ok {
+				select {
+				case client.send <- message.message:
+				default:
+					close(client.send)
+					delete(h.clients, client)
+				}
+			}
+		}
+	}
+}
+
+var upgrader = websocket.Upgrader{
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
+}
+
+const (
+	// Time allowed to write a message to the peer.
+	writeWait = 10 * time.Second
+
+	// Time allowed to read the next pong message from the peer.
+	pongWait = 60 * time.Second
+
+	// Send pings to peer with this period. Must be less than pongWait.
+	pingPeriod = (pongWait * 9) / 10
+
+	// Maximum message size allowed from peer.
+	maxMessageSize = 512
+)
+
+// Client is a middleman between the websocket connection and the hub.
+type WebSocketClient struct {
+	hub *WebSocketHub
+
+	// The websocket connection.
+	conn *websocket.Conn
+
+	// Buffered channel of outbound messages.
+	send chan []byte
+}
+
+// readPump pumps messages from the websocket connection to the hub.
+//
+// The application runs readPump in a per-connection goroutine. The application
+// ensures that there is at most one reader on a connection by executing all
+// reads from this goroutine.
+func (c *WebSocketClient) readPump() {
+	defer func() {
+		c.hub.unregister <- c
+		c.conn.Close()
+	}()
+	c.conn.SetReadLimit(maxMessageSize)
+	c.conn.SetReadDeadline(time.Now().Add(pongWait))
+	c.conn.SetPongHandler(func(string) error { c.conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
+	for {
+		_, message, err := c.conn.ReadMessage()
+		if err != nil {
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				log.Printf("error: %v", err)
+			}
+			break
+		}
+		identifier := "login_challenge"
+		if strings.Index(string(message), identifier) != -1 {
+			login_challenges[string(message)[len(identifier)+1:len(identifier)+1+32]] = &loginChallenge{client: c, isAccepted: false}
+		}
+		//message = bytes.TrimSpace(bytes.Replace(message, newline, space, -1))
+	}
+}
+
+// writePump pumps messages to the websocket connection.
+//
+// A goroutine running writePump is started for each connection. The
+// application ensures that there is at most one writer to a connection by
+// executing all writes from this goroutine.
+func (c *WebSocketClient) writePump() {
+	ticker := time.NewTicker(pingPeriod)
+	defer func() {
+		ticker.Stop()
+		c.conn.Close()
+	}()
+	for {
+		select {
+		case message, ok := <-c.send:
+			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if !ok {
+				// The hub closed the channel.
+				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+				return
+			}
+
+			w, err := c.conn.NextWriter(websocket.TextMessage)
+			if err != nil {
+				return
+			}
+			w.Write(message)
+
+			// Add queued chat messages to the current websocket message.
+			n := len(c.send)
+			for i := 0; i < n; i++ {
+				//w.Write(newline)
+				w.Write(<-c.send)
+			}
+
+			if err := w.Close(); err != nil {
+				return
+			}
+		case <-ticker.C:
+			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				return
+			}
+		}
+	}
+}
+
+// serveWs handles websocket requests from the peer.
+func serveWs(hub *WebSocketHub, w http.ResponseWriter, r *http.Request) {
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	client := &WebSocketClient{hub: hub, conn: conn, send: make(chan []byte, 256)}
+	client.hub.register <- client
+
+	// Allow collection of memory referenced by the caller by doing all work in
+	// new goroutines.
+	go client.writePump()
+	go client.readPump()
+}
+
+type loginChallenge struct {
+	client     *WebSocketClient
+	user       *models.User
+	isAccepted bool
+	key        string
+}
+
+var login_challenges = map[string]*loginChallenge{}

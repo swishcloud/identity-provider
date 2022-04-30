@@ -75,5 +75,6 @@ sudo docker run --rm -it \
  --grant-types authorization_code,refresh_token \
  --response-types token,code,id_token \
  --scope openid,offline,profile \
- --callbacks $IDENTITY_PROVIDER_ADDDR/.approvalnativeapp \
+ --callbacks com.example.app:/logincallback \
  --token-endpoint-auth-method none
+ #--callbacks $IDENTITY_PROVIDER_ADDDR/.approvalnativeapp \

@@ -24,6 +24,7 @@ import (
 
 const (
 	Path_Login              = "/login"
+	Path_Login_Acceptance   = "/login-acceptance"
 	Path_Email_Validate     = "/email-validate"
 	Path_Register_Succeeded = "/register-succeeded"
 	Path_Change_Password    = "/change-password"
@@ -81,6 +82,7 @@ func PasswordResetHandler(s *IDPServer) goweb.HandlerFunc {
 			email := ctx.Request.Form.Get("EMAIL")
 			code := ctx.Request.Form.Get("CODE")
 			if email != "" && code != "" {
+				//third step, the reset password url is accessed
 				user := s.GetStorage(ctx).GetUserByEmail(email)
 				if user == nil {
 					panic("the user does not exist")
@@ -92,8 +94,10 @@ func PasswordResetHandler(s *IDPServer) goweb.HandlerFunc {
 						break
 					}
 				}
+				if vc == "" {
+					panic("the link is invalid")
+				}
 				code = vc + code
-				//third step, the reset password url is accessed
 				if ok, err := check_verification_code(s.GetStorage(ctx), email, code, internal.VC_LENGTH_PASSWORD_RESET_FORM); !ok || err != nil {
 					panic("the link is invalid")
 				}
@@ -228,13 +232,25 @@ func loginAuthenticate(s storage.Storage, account, password string) (*models.Use
 }
 func LoginHandler(s *IDPServer) goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
+		login_challenge := ctx.Request.Form.Get("login_challenge")
+		//login_challenge = login_challenge[1 : 1+32]
 		account := ctx.Request.Form.Get("account")
 		password := ctx.Request.Form.Get("password")
-		user, err := loginAuthenticate(s.GetStorage(ctx), account, password)
-		if err != nil {
-			panic(err)
+		key := ctx.Request.Form.Get("key")
+		var user *models.User
+		var err error
+		if account != "" {
+			user, err = loginAuthenticate(s.GetStorage(ctx), account, password)
+			if err != nil {
+				panic(err)
+			}
+		} else {
+			if login_challenge := login_challenges[login_challenge]; login_challenge != nil && login_challenge.isAccepted && login_challenge.key == key {
+				user = login_challenge.user
+			} else {
+				panic("Login failed.")
+			}
 		}
-		login_challenge := ctx.Request.URL.Query().Get("login_challenge")
 		AcceptLogin(s, ctx, login_challenge, *user)
 	}
 }
@@ -287,6 +303,25 @@ func userInfoHandler(s *IDPServer) goweb.HandlerFunc {
 		ctx.Success(user)
 	}
 }
+func loginAcceptanceHandler(s *IDPServer) goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		user := ctx.Data["user"].(*models.User)
+		challenge := ctx.Request.FormValue("challenge")
+		login_challenge := login_challenges[challenge]
+		if login_challenge == nil {
+			panic("the login challenge is not found")
+		}
+		login_challenge.isAccepted = true
+		login_challenge.user = user
+		if key, err := keygenerator.NewKey(20, false, false, false, false); err != nil {
+			panic(err)
+		} else {
+			login_challenge.key = key
+		}
+		s.wsHub.messages <- &WebSocketMessage{login_challenge.client, []byte(login_challenge.key)}
+		ctx.Success(nil)
+	}
+}
 
 const (
 	LoginPath            = "/oauth2/auth/requests/login"
@@ -316,18 +351,24 @@ func apiMiddleware(s *IDPServer) goweb.HandlerFunc {
 
 func introspectTokenMiddleware(s *IDPServer) goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
-		if auth.HasLoggedIn(s.rac, ctx, s.oauth2_config, s.config.Introspect_Token_Url, s.skip_tls_verify) {
-			ctx.Next()
-		} else {
+		if s, err := auth.GetSessionByToken(s.rac, ctx, s.oauth2_config, s.config.Introspect_Token_Url, s.skip_tls_verify); err != nil {
 			http.Redirect(ctx.Writer, ctx.Request, "/login", http.StatusFound)
+		} else {
+			u := &models.User{}
+			u.Id = s.Claims["sub"].(string)
+			u.Name = s.Claims["name"].(string)
+			if avartar, ok := s.Claims["avatar"].(string); ok {
+				u.Avatar = &avartar
+			}
+			ctx.Data["user"] = u
+			ctx.Next()
 		}
 	}
 }
 func AcceptLogin(s *IDPServer, ctx *goweb.Context, login_challenge string, user models.User) {
 	body := HydraLoginAcceptBody{}
 	body.Subject = user.Id
-	body.Remember = true
-	body.Remember_for = 60 * 5
+	body.Remember = false
 	b, err := json.Marshal(body)
 	if err != nil {
 		panic(err)
@@ -403,13 +444,16 @@ type LoginModel struct {
 }
 
 type HydraLoginRes struct {
-	Skip            bool        `json:"skip"`
-	Subject         string      `json:"subject"`
-	Client          interface{} `json:"client"`
-	Request_url     string      `json:"request_url"`
-	Requested_scope []string    `json:"requested_scope"`
-	Oidc_context    interface{} `json:"oidc_context"`
-	Context         interface{} `json:"context"`
+	Skip            bool                 `json:"skip"`
+	Subject         string               `json:"subject"`
+	Client          HydraLoginRes_Client `json:"client"`
+	Request_url     string               `json:"request_url"`
+	Requested_scope []string             `json:"requested_scope"`
+	Oidc_context    interface{}          `json:"oidc_context"`
+	Context         interface{}          `json:"context"`
+}
+type HydraLoginRes_Client struct {
+	Client_id string `json:"client_id"`
 }
 
 type HydraLoginAcceptBody struct {
