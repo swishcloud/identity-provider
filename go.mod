@@ -12,7 +12,7 @@ require (
 	github.com/gorilla/websocket v1.5.0
 	github.com/lib/pq v1.10.1
 	github.com/spf13/cobra v1.1.3
-	github.com/swishcloud/gostudy v0.0.0-20210425093220-d43a5c8312ae
+	github.com/swishcloud/gostudy v0.0.0-20220416133912-4aab12987853
 	github.com/swishcloud/goweb v0.0.0-20220430042806-e33af33f75d0
 	golang.org/x/net v0.0.0-20220421235706-1d1ef9303861 // indirect
 	golang.org/x/oauth2 v0.0.0-20210514164344-f6687ab2804c
