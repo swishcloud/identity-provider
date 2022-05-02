@@ -3,9 +3,7 @@ package server
 import (
 	"context"
 	"crypto/tls"
-	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"image/png"
 	"io/ioutil"
@@ -21,7 +19,6 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/swishcloud/gostudy/common"
 	"github.com/swishcloud/gostudy/email"
-	"github.com/swishcloud/gostudy/keygenerator"
 	"github.com/swishcloud/goweb"
 	"github.com/swishcloud/goweb/auth"
 	"github.com/swishcloud/identity-provider/global"
@@ -30,8 +27,6 @@ import (
 	"golang.org/x/oauth2"
 	"gopkg.in/yaml.v2"
 )
-
-const csrf_state_cookie_name = "crft_state"
 
 type Config struct {
 	HYDRA_HOST               string       `yaml:"hydra_host"`
@@ -130,7 +125,50 @@ func (s *IDPServer) invalidateLoginSession(sub string) {
 		panic(err)
 	}
 	if resp.StatusCode != 204 {
-		panic("response status of deleting sessions request:" + resp.Status)
+		panic("response status of deleting login sessions request:" + resp.Status)
+	}
+}
+func (s *IDPServer) getConsentSessions(sub string) []interface{} {
+	parameters := url.Values{}
+	parameters.Add("subject", sub)
+	rar := common.NewRestApiRequest("GET", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, SessionsPath+"/consent", parameters), nil)
+	resp, err := s.rac.Do(rar)
+	if err != nil {
+		panic(err)
+	}
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		panic(err)
+	}
+	res := []interface{}{}
+	err = json.Unmarshal(b, &res)
+	if err != nil {
+		panic(err)
+	}
+	return res
+}
+func (s *IDPServer) invalidateConsentSession(sub string, client *string) {
+	parameters := url.Values{}
+	parameters.Add("subject", sub)
+	if client != nil {
+		parameters.Add("client", *client)
+		parameters.Add("all", "false")
+	} else {
+		parameters.Add("all", "true")
+	}
+	rar := common.NewRestApiRequest("DELETE", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, SessionsPath+"/consent", parameters), nil)
+	resp, err := s.rac.Do(rar)
+	if err != nil {
+		panic(err)
+	}
+	if resp.StatusCode != 204 {
+		b, err := ioutil.ReadAll(resp.Body)
+		res := HydraConsentRes{}
+		json.Unmarshal(b, &res)
+		if err != nil {
+			panic(err)
+		}
+		panic("response status of deleting consent sessions request:" + resp.Status + "\r\n" + string(b))
 	}
 }
 
@@ -144,6 +182,7 @@ func (s *IDPServer) Serve() {
 	privileged_g.GET("/", func(ctx *goweb.Context) {
 		ctx.RenderPage(s.newPageModel(ctx, nil), "templates/layout.html", "templates/index.html")
 	})
+	privileged_g.GET(Path_Profile, profileHandler(s))
 	s.engine.RegexMatch(regexp.MustCompile(`/static/.+`), func(context *goweb.Context) {
 		http.StripPrefix("/static/", http.FileServer(http.Dir("./static"))).ServeHTTP(context.Writer, context.Request)
 	})
@@ -212,11 +251,10 @@ func (s *IDPServer) Serve() {
 		login_challenge := ctx.Request.URL.Query().Get("login_challenge")
 		if login_challenge == "" {
 			//issue login request for the site itself
-			state, err := keygenerator.NewKey(20, false, false, false, false)
+			state, err := auth.SetStateCookie(ctx)
 			if err != nil {
 				panic(err)
 			}
-			state = base64.URLEncoding.EncodeToString([]byte(state))
 			url := s.oauth2_config.AuthCodeURL(state, oauth2.AccessTypeOffline)
 			http.Redirect(ctx.Writer, ctx.Request, url, 302)
 		} else {
@@ -238,14 +276,10 @@ func (s *IDPServer) Serve() {
 				ctx.Writer.Write(b)
 				return
 			}
-			request_url, err := url.Parse(loginRes.Request_url)
 			if err != nil {
 				ctx.Writer.Write(b)
 				return
 			}
-			state := request_url.Query().Get("state")
-			cookie := http.Cookie{Name: csrf_state_cookie_name, Value: state, Path: "/"}
-			http.SetCookie(ctx.Writer, &cookie)
 			if err != nil {
 				panic(err)
 			}
@@ -273,7 +307,7 @@ func (s *IDPServer) Serve() {
 	})
 	s.engine.POST("/login", LoginHandler(s))
 	s.engine.GET("/login-callback", func(ctx *goweb.Context) {
-		code, err := get_code(ctx)
+		code, err := auth.GetAuthorizationCode(ctx)
 		if err != nil {
 			panic(err)
 		}
@@ -341,20 +375,6 @@ func (s *IDPServer) Serve() {
 	if err != nil {
 		log.Fatal(err)
 	}
-}
-
-func get_code(ctx *goweb.Context) (string, error) {
-	state := ctx.Request.URL.Query().Get("state")
-	common.DelCookie(ctx.Writer, csrf_state_cookie_name)
-	if cookie, err := ctx.Request.Cookie(csrf_state_cookie_name); err != nil {
-		return "", errors.New("state cookie does not present")
-	} else {
-		if cookie.Value != state {
-			return "", errors.New("csrf verification failed")
-		}
-	}
-	code := ctx.Request.URL.Query().Get("code")
-	return code, nil
 }
 
 type HandlerWidget struct {

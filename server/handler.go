@@ -29,16 +29,14 @@ const (
 	Path_Register_Succeeded = "/register-succeeded"
 	Path_Change_Password    = "/change-password"
 	Path_User_Info          = "/user_info"
+	Path_Profile            = "/profile"
 	Path_Password_Reset     = "/password_reset"
+	Path_Logout             = "/logout"
 )
 
 func ApprovalNativeAppHandler(s *IDPServer) goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
-		code, err := get_code(ctx)
-		if err != nil {
-			panic(err)
-		}
-		ctx.RenderPage(s.newPageModel(ctx, code), "templates/layout.html", "templates/approvalnativeapp.html")
+		ctx.RenderPage(s.newPageModel(ctx, ctx.Request.URL.Query().Get("code")), "templates/layout.html", "templates/approvalnativeapp.html")
 	}
 }
 func ChangePasswordHandler(s *IDPServer) goweb.HandlerFunc {
@@ -71,6 +69,7 @@ func ChangePasswordHandler(s *IDPServer) goweb.HandlerFunc {
 				panic("login is invalid")
 			}
 			s.invalidateLoginSession(user.Id)
+			s.invalidateConsentSession(user.Id, nil)
 			s.GetStorage(ctx).ChangePassword(user.Id, password)
 			ctx.Success(Path_Login)
 		}
@@ -303,6 +302,13 @@ func userInfoHandler(s *IDPServer) goweb.HandlerFunc {
 		ctx.Success(user)
 	}
 }
+func profileHandler(s *IDPServer) goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		user := ctx.Data["user"].(*models.User)
+		_ = user
+		ctx.RenderPage(s.newPageModel(ctx, ctx.Request.URL.Query().Get("code")), "templates/layout.html", "templates/profile.html")
+	}
+}
 func loginAcceptanceHandler(s *IDPServer) goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
 		user := ctx.Data["user"].(*models.User)
@@ -366,6 +372,9 @@ func introspectTokenMiddleware(s *IDPServer) goweb.HandlerFunc {
 	}
 }
 func AcceptLogin(s *IDPServer, ctx *goweb.Context, login_challenge string, user models.User) {
+	//invalidate previous tokens
+	s.invalidateConsentSession(user.Id, &s.oauth2_config.ClientID)
+
 	body := HydraLoginAcceptBody{}
 	body.Subject = user.Id
 	body.Remember = false
