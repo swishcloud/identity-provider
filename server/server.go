@@ -523,7 +523,7 @@ func (c *WebSocketClient) readPump() {
 						if ok, _ := loginChallenge.isValid(); !ok {
 							break
 						}
-						if loginChallenge.status != 1 {
+						if loginChallenge.status != 0 {
 							break
 						}
 						qr_code, err := keygenerator.NewKey(internal.VC_LENGTH_QRCODE, false, false, false, true)
