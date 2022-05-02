@@ -23,7 +23,7 @@
         </div>
         <div id="divPwdLogin" class="d-none d-md-block">
             <h4>扫码登录</h4>
-            <img id="QRCODE" src="/qr_code?str={{.Qrcode}}" style="width: 200px;height:200px;" />
+            <img id="QRCODE" style="width: 200px;height:200px;" />
         </div>
         <div class="mt-2">
             <a id="switchLoginMethod" class="btn-link mr-2" href="#">密码登录</a>
@@ -78,15 +78,16 @@
         socket.send('login_challenge:{{.Login_challenge}}');
         console.log('Connection opened')
     });
-
+    challenge = "{{.Login_challenge}}"
     qrcode = "{{.Qrcode}}"
+    $("#QRCODE").attr("src", "/qr_code?str=" + btoa(challenge + qrcode))
     // Listen for messages
     socket.addEventListener('message', function (event) {
         app.closeError($('#error'))
         let msg = String(event.data)
         if (msg.startsWith("QR:")) {
             qrcode = msg.substring(3)
-            $("#QRCODE").attr("src", "/qr_code?str=" + qrcode)
+            $("#QRCODE").attr("src", "/qr_code?str=" + btoa(challenge + qrcode))
         } else if (msg == "1") {
             app.showError($('#error'), "QRCODE has been scanned")
         } else if (msg.startsWith("2")) {
