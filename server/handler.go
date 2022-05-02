@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"html/template"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -244,7 +245,10 @@ func LoginHandler(s *IDPServer) goweb.HandlerFunc {
 				panic(err)
 			}
 		} else {
-			if login_challenge := login_challenges[login_challenge]; login_challenge != nil && login_challenge.isAccepted && login_challenge.key == key {
+			if login_challenge := findLoginChallenge(login_challenge); login_challenge != nil && login_challenge.isAccepted && login_challenge.key == key {
+				if ok, err := login_challenge.isValid(); !ok {
+					panic(err)
+				}
 				user = login_challenge.user
 			} else {
 				panic("Login failed.")
@@ -313,9 +317,12 @@ func loginAcceptanceHandler(s *IDPServer) goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
 		user := ctx.Data["user"].(*models.User)
 		challenge := ctx.Request.FormValue("challenge")
-		login_challenge := login_challenges[challenge]
+		login_challenge := findLoginChallenge(challenge)
 		if login_challenge == nil {
 			panic("the login challenge is not found")
+		}
+		if ok, err := login_challenge.isValid(); !ok {
+			panic(err)
 		}
 		login_challenge.isAccepted = true
 		login_challenge.user = user
@@ -372,20 +379,46 @@ func introspectTokenMiddleware(s *IDPServer) goweb.HandlerFunc {
 	}
 }
 func AcceptLogin(s *IDPServer, ctx *goweb.Context, login_challenge string, user models.User) {
-	//invalidate previous tokens
-	s.invalidateConsentSession(user.Id, &s.oauth2_config.ClientID)
-
-	body := HydraLoginAcceptBody{}
-	body.Subject = user.Id
-	body.Remember = false
-	b, err := json.Marshal(body)
+	//get login request info
+	parameters := url.Values{}
+	parameters.Add("login_challenge", login_challenge)
+	rar := common.NewRestApiRequest("GET", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, LoginPath, parameters), nil)
+	resp, err := s.rac.Do(rar)
 	if err != nil {
 		panic(err)
 	}
-	parameters := url.Values{}
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		panic(err)
+	}
+	loginRes := HydraLoginRes{}
+	err = json.Unmarshal(b, &loginRes)
+	if err != nil {
+		panic(err)
+	}
+	log.Println(string(b))
+	//check if the challenge has already expired
+	if login_challenge := findLoginChallenge(login_challenge); login_challenge != nil {
+		if ok, err := login_challenge.isValid(); !ok {
+			panic(err)
+		}
+	} else {
+		panic("not found chanllenge")
+	}
+	//invalidate previous tokens
+	s.invalidateConsentSession(user.Id, &loginRes.Client.Client_id)
+	//accept this login request
+	body := HydraLoginAcceptBody{}
+	body.Subject = user.Id
+	body.Remember = false
+	b, err = json.Marshal(body)
+	if err != nil {
+		panic(err)
+	}
+	parameters = url.Values{}
 	parameters.Add("login_challenge", login_challenge)
-	rar := common.NewRestApiRequest("PUT", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, LoginPath+"/accept", parameters), b)
-	resp, err := s.rac.Do(rar)
+	rar = common.NewRestApiRequest("PUT", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, LoginPath+"/accept", parameters), b)
+	resp, err = s.rac.Do(rar)
 	if err != nil {
 		panic(err)
 	}
@@ -459,12 +492,22 @@ type HydraLoginRes struct {
 	Request_url     string               `json:"request_url"`
 	Requested_scope []string             `json:"requested_scope"`
 	Oidc_context    interface{}          `json:"oidc_context"`
+	Created_at      string               `json:"created_at"`
+	Updated_at      string               `json:"updated_at"`
 	Context         interface{}          `json:"context"`
 }
 type HydraLoginRes_Client struct {
 	Client_id string `json:"client_id"`
 }
-
+type HydraConsentSessionRes struct {
+	Consent_request HydraConsentSessionRes_Consent_request `json:"consent_request"`
+}
+type HydraConsentSessionRes_Consent_request struct {
+	Client HydraConsentSessionRes_Consent_request_client `json:"client"`
+}
+type HydraConsentSessionRes_Consent_request_client struct {
+	Client_id string `json:"client_id"`
+}
 type HydraLoginAcceptBody struct {
 	Subject      string `json:"subject"`
 	Remember     bool   `json:"remember"`

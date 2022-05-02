@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"image/png"
 	"io/ioutil"
@@ -12,6 +13,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/boombuler/barcode"
@@ -128,7 +130,7 @@ func (s *IDPServer) invalidateLoginSession(sub string) {
 		panic("response status of deleting login sessions request:" + resp.Status)
 	}
 }
-func (s *IDPServer) getConsentSessions(sub string) []interface{} {
+func (s *IDPServer) getConsentSessions(sub string, client *string) []HydraConsentSessionRes {
 	parameters := url.Values{}
 	parameters.Add("subject", sub)
 	rar := common.NewRestApiRequest("GET", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, SessionsPath+"/consent", parameters), nil)
@@ -140,14 +142,28 @@ func (s *IDPServer) getConsentSessions(sub string) []interface{} {
 	if err != nil {
 		panic(err)
 	}
-	res := []interface{}{}
-	err = json.Unmarshal(b, &res)
+	res := []HydraConsentSessionRes{}
+	json.Unmarshal(b, &res)
 	if err != nil {
 		panic(err)
+	}
+	if client != nil {
+		for i := 0; i < len(res); i++ {
+			if res[i].Consent_request.Client.Client_id != *client {
+				res = append(res[:i], res[i+1:]...)
+				i--
+			}
+		}
 	}
 	return res
 }
 func (s *IDPServer) invalidateConsentSession(sub string, client *string) {
+	ss := s.getConsentSessions(sub, client)
+	if len(ss) == 0 {
+		log.Printf("No consent session need to be invalidated.")
+		return
+	}
+
 	parameters := url.Values{}
 	parameters.Add("subject", sub)
 	if client != nil {
@@ -251,14 +267,15 @@ func (s *IDPServer) Serve() {
 		login_challenge := ctx.Request.URL.Query().Get("login_challenge")
 		if login_challenge == "" {
 			//issue login request for the site itself
-			state, err := auth.SetStateCookie(ctx)
+			state, pkce_encoded, err := auth.SetStateCookie(ctx)
 			if err != nil {
 				panic(err)
 			}
-			url := s.oauth2_config.AuthCodeURL(state, oauth2.AccessTypeOffline)
+			url := s.oauth2_config.AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.SetAuthURLParam("code_challenge", pkce_encoded), oauth2.SetAuthURLParam("code_challenge_method", "S256"))
 			http.Redirect(ctx.Writer, ctx.Request, url, 302)
 		} else {
 			//processing login request from thid-party website or the site itself
+			registerLoginChallenge(login_challenge)
 			parameters := url.Values{}
 			parameters.Add("login_challenge", login_challenge)
 			rar := common.NewRestApiRequest("GET", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, LoginPath, parameters), nil)
@@ -272,14 +289,6 @@ func (s *IDPServer) Serve() {
 			}
 			loginRes := HydraLoginRes{}
 			err = json.Unmarshal(b, &loginRes)
-			if err != nil {
-				ctx.Writer.Write(b)
-				return
-			}
-			if err != nil {
-				ctx.Writer.Write(b)
-				return
-			}
 			if err != nil {
 				panic(err)
 			}
@@ -307,11 +316,11 @@ func (s *IDPServer) Serve() {
 	})
 	s.engine.POST("/login", LoginHandler(s))
 	s.engine.GET("/login-callback", func(ctx *goweb.Context) {
-		code, err := auth.GetAuthorizationCode(ctx)
+		code, pkce, err := auth.GetAuthorizationCode(ctx)
 		if err != nil {
 			panic(err)
 		}
-		token, err := s.oauth2_config.Exchange(context.WithValue(context.Background(), "", s.httpClient), code)
+		token, err := s.oauth2_config.Exchange(context.WithValue(context.Background(), "", s.httpClient), code, oauth2.SetAuthURLParam("code_verifier", pkce))
 		if err != nil {
 			ctx.Writer.Write([]byte(err.Error()))
 			return
@@ -500,7 +509,13 @@ func (c *WebSocketClient) readPump() {
 		}
 		identifier := "login_challenge"
 		if strings.Index(string(message), identifier) != -1 {
-			login_challenges[string(message)[len(identifier)+1:len(identifier)+1+32]] = &loginChallenge{client: c, isAccepted: false}
+			if loginChallenge := findLoginChallenge(string(message)[len(identifier)+1 : len(identifier)+1+32]); loginChallenge != nil {
+				if ok, err := loginChallenge.isValid(); !ok {
+					log.Println(err)
+					continue
+				}
+				loginChallenge.client = c
+			}
 		}
 		//message = bytes.TrimSpace(bytes.Replace(message, newline, space, -1))
 	}
@@ -569,10 +584,45 @@ func serveWs(hub *WebSocketHub, w http.ResponseWriter, r *http.Request) {
 }
 
 type loginChallenge struct {
+	challenge  string
 	client     *WebSocketClient
 	user       *models.User
 	isAccepted bool
 	key        string
+	created_at time.Time
 }
 
-var login_challenges = map[string]*loginChallenge{}
+func registerLoginChallenge(challenge string) {
+	login_challenges_mutex.Lock()
+	defer login_challenges_mutex.Unlock()
+	r := findLoginChallenge(challenge)
+	if r != nil {
+		panic("request invalid")
+	}
+	for i := 0; i < len(login_challenges); i++ {
+		if ok, _ := login_challenges[i].isValid(); !ok {
+			login_challenges = append(login_challenges[:i], login_challenges[i+1:]...)
+			i--
+		}
+	}
+	login_challenges = append(login_challenges, &loginChallenge{challenge: challenge, client: nil, user: nil, isAccepted: false, key: "", created_at: time.Now().UTC()})
+
+}
+func findLoginChallenge(challenge string) *loginChallenge {
+	for _, item := range login_challenges {
+		if item.challenge == challenge {
+			return item
+		}
+	}
+	return nil
+}
+func (challenge *loginChallenge) isValid() (bool, error) {
+	diff := challenge.created_at.Sub(time.Now().UTC()).Seconds()
+	if diff < (-60) || diff > (-1) {
+		return false, errors.New("timeout")
+	}
+	return true, nil
+}
+
+var login_challenges = []*loginChallenge{}
+var login_challenges_mutex sync.Mutex
