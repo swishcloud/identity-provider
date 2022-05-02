@@ -613,8 +613,8 @@ github.com/subosito/gotenv v1.2.0/go.mod h1:N0PQaV/YGNqwC0u51sEeR/aUtSLEXKX9iv69
 github.com/swishcloud/gostudy v0.0.0-20210425093220-d43a5c8312ae/go.mod h1:vo5+bdSqcRelUKQhw73YcxB54S35CkxgHMv2rfGGg/U=
 github.com/swishcloud/gostudy v0.0.0-20220416133912-4aab12987853 h1:uGTFXc15g41E+L4Ku/a96sArpJopMgqvq62lzQIcM64=
 github.com/swishcloud/gostudy v0.0.0-20220416133912-4aab12987853/go.mod h1:vo5+bdSqcRelUKQhw73YcxB54S35CkxgHMv2rfGGg/U=
-github.com/swishcloud/goweb v0.0.0-20220502053120-d7a92940d2cd h1:BeNKm/uMFDg3Kb/B4ckmfCYPkuznGcP05ORIrQVhNJs=
-github.com/swishcloud/goweb v0.0.0-20220502053120-d7a92940d2cd/go.mod h1:jHP2/q1vkHyqUNGdPYpNmc9PxJnCqkGZbdrvXIVGJak=
+github.com/swishcloud/goweb v0.0.0-20220502132155-40593dfb737e h1:YiJZLm72zn1z9/iR4mV8Ehy9yNsGojst+dW5osy7Mbg=
+github.com/swishcloud/goweb v0.0.0-20220502132155-40593dfb737e/go.mod h1:jHP2/q1vkHyqUNGdPYpNmc9PxJnCqkGZbdrvXIVGJak=
 github.com/syndtr/gocapability v0.0.0-20170704070218-db04d3cc01c8/go.mod h1:hkRG7XYTFWNJGYcbNJQlaLq0fg1yr4J4t/NcTQtrfww=
 github.com/syndtr/gocapability v0.0.0-20180916011248-d98352740cb2/go.mod h1:hkRG7XYTFWNJGYcbNJQlaLq0fg1yr4J4t/NcTQtrfww=
 github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635/go.mod h1:hkRG7XYTFWNJGYcbNJQlaLq0fg1yr4J4t/NcTQtrfww=

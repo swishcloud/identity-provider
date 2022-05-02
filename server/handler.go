@@ -245,7 +245,7 @@ func LoginHandler(s *IDPServer) goweb.HandlerFunc {
 				panic(err)
 			}
 		} else {
-			if login_challenge := findLoginChallenge(login_challenge); login_challenge != nil && login_challenge.isAccepted && login_challenge.key == key {
+			if login_challenge := findLoginChallenge(login_challenge); login_challenge != nil && login_challenge.status == 2 && login_challenge.key == key {
 				if ok, err := login_challenge.isValid(); !ok {
 					panic(err)
 				}
@@ -317,6 +317,8 @@ func loginAcceptanceHandler(s *IDPServer) goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
 		user := ctx.Data["user"].(*models.User)
 		challenge := ctx.Request.FormValue("challenge")
+		qrcode := ctx.Request.FormValue("qrcode")
+		operation := ctx.Request.FormValue("operation")
 		login_challenge := findLoginChallenge(challenge)
 		if login_challenge == nil {
 			panic("the login challenge is not found")
@@ -324,15 +326,39 @@ func loginAcceptanceHandler(s *IDPServer) goweb.HandlerFunc {
 		if ok, err := login_challenge.isValid(); !ok {
 			panic(err)
 		}
-		login_challenge.isAccepted = true
-		login_challenge.user = user
-		if key, err := keygenerator.NewKey(20, false, false, false, false); err != nil {
-			panic(err)
-		} else {
-			login_challenge.key = key
+		if operation == "1" {
+			//scaned
+			if len(login_challenge.qrcode) != internal.VC_LENGTH_QRCODE {
+				panic("qr code invalid")
+			}
+			if login_challenge.qrcode != qrcode {
+				panic("the qr code is expired")
+			}
+			err := login_challenge.update_status(1)
+			if err != nil {
+				panic(err)
+			}
+		} else if operation == "2" {
+			err := login_challenge.update_status(2)
+			if err != nil {
+				panic(err)
+			}
+			login_challenge.user = user
+			if key, err := keygenerator.NewKey(20, false, false, false, false); err != nil {
+				panic(err)
+			} else {
+				login_challenge.key = key
+			}
+		} else if operation == "3" {
+			err := login_challenge.update_status(3)
+			if err != nil {
+				panic(err)
+			}
 		}
-		s.wsHub.messages <- &WebSocketMessage{login_challenge.client, []byte(login_challenge.key)}
-		ctx.Success(nil)
+		s.wsHub.messages <- &WebSocketMessage{login_challenge.client, []byte(strconv.Itoa(login_challenge.status))}
+		if login_challenge.status == 2 {
+			s.wsHub.messages <- &WebSocketMessage{login_challenge.client, []byte(login_challenge.key)}
+		}
 	}
 }
 

@@ -23,7 +23,7 @@
         </div>
         <div id="divPwdLogin" class="d-none d-md-block">
             <h4>扫码登录</h4>
-            <img src="/qr_code?str={{.}}" style="width: 200px;height:200px;" />
+            <img id="QRCODE" src="/qr_code?str={{.Qrcode}}" style="width: 200px;height:200px;" />
         </div>
         <div class="mt-2">
             <a id="switchLoginMethod" class="btn-link mr-2" href="#">密码登录</a>
@@ -75,20 +75,31 @@
 
     // Connection opened
     socket.addEventListener('open', function (event) {
-        socket.send('login_challenge:{{.}}');
+        socket.send('login_challenge:{{.Login_challenge}}');
         console.log('Connection opened')
     });
 
+    qrcode = "{{.Qrcode}}"
     // Listen for messages
     socket.addEventListener('message', function (event) {
-        console.log('Message from server ', event.data);
-        if (event.data == "hello") {
-            console.log("challenge is accepted")
+        app.closeError($('#error'))
+        let msg = String(event.data)
+        if (msg.startsWith("QR:")) {
+            qrcode = msg.substring(3)
+            $("#QRCODE").attr("src", "/qr_code?str=" + qrcode)
+        } else if (msg == "1") {
+            app.showError($('#error'), "QRCODE has been scanned")
+        } else if (msg.startsWith("2")) {
+            app.showError($('#error'), "LOGIN accepted")
+            key = msg.substring(1)
+            $.post("/login", { login_challenge: "{{.Login_challenge}}", key: key }, function (res) {
+                window.location.href = res.data
+            });
+        } else if (msg == "3") {
+            location.href = location.pathname
+        } else {
+            console.log("error:" + msg)
         }
-        $.post("/login", { login_challenge: "{{.}}", key: event.data }, function (res) {
-            window.location.href = res.data
-        });
-
     });
     socket.addEventListener('close', function (event) {
         console.log('a websocket is closed')

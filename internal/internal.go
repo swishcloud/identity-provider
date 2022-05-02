@@ -10,3 +10,5 @@ func TimestampToTime(timestamp float64) time.Time {
 
 const VC_LENGTH_PASSWORD_RESET_FORM int = 50
 const VC_LENGTH_PASSWORD_RESET int = 100
+
+const VC_LENGTH_QRCODE = 30

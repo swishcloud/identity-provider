@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
@@ -21,9 +20,11 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/swishcloud/gostudy/common"
 	"github.com/swishcloud/gostudy/email"
+	"github.com/swishcloud/gostudy/keygenerator"
 	"github.com/swishcloud/goweb"
 	"github.com/swishcloud/goweb/auth"
 	"github.com/swishcloud/identity-provider/global"
+	"github.com/swishcloud/identity-provider/internal"
 	"github.com/swishcloud/identity-provider/storage"
 	"github.com/swishcloud/identity-provider/storage/models"
 	"golang.org/x/oauth2"
@@ -267,15 +268,15 @@ func (s *IDPServer) Serve() {
 		login_challenge := ctx.Request.URL.Query().Get("login_challenge")
 		if login_challenge == "" {
 			//issue login request for the site itself
-			state, pkce_encoded, err := auth.SetStateCookie(ctx)
+			url, err := auth.AuthCodeURL(ctx, s.oauth2_config)
 			if err != nil {
 				panic(err)
 			}
-			url := s.oauth2_config.AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.SetAuthURLParam("code_challenge", pkce_encoded), oauth2.SetAuthURLParam("code_challenge_method", "S256"))
 			http.Redirect(ctx.Writer, ctx.Request, url, 302)
 		} else {
 			//processing login request from thid-party website or the site itself
 			registerLoginChallenge(login_challenge)
+			challenge := findLoginChallenge(login_challenge)
 			parameters := url.Values{}
 			parameters.Add("login_challenge", login_challenge)
 			rar := common.NewRestApiRequest("GET", global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_ADMIN_PORT, LoginPath, parameters), nil)
@@ -300,10 +301,15 @@ func (s *IDPServer) Serve() {
 					scan_login = false
 				}
 				scan_login = false
+				type Data struct {
+					Login_challenge string
+					Qrcode          string
+				}
+				d := Data{Login_challenge: login_challenge, Qrcode: challenge.qrcode}
 				if scan_login {
-					ctx.RenderPage(s.newPageModel(ctx, login_challenge), "templates/layout.html", "templates/scan-login.html")
+					ctx.RenderPage(s.newPageModel(ctx, d), "templates/layout.html", "templates/scan-login.html")
 				} else {
-					ctx.RenderPage(s.newPageModel(ctx, login_challenge), "templates/layout.html", "templates/login.html")
+					ctx.RenderPage(s.newPageModel(ctx, d), "templates/layout.html", "templates/login.html")
 				}
 			}
 		}
@@ -316,11 +322,7 @@ func (s *IDPServer) Serve() {
 	})
 	s.engine.POST("/login", LoginHandler(s))
 	s.engine.GET("/login-callback", func(ctx *goweb.Context) {
-		code, pkce, err := auth.GetAuthorizationCode(ctx)
-		if err != nil {
-			panic(err)
-		}
-		token, err := s.oauth2_config.Exchange(context.WithValue(context.Background(), "", s.httpClient), code, oauth2.SetAuthURLParam("code_verifier", pkce))
+		token, err := auth.Exchange(ctx, s.oauth2_config, s.httpClient)
 		if err != nil {
 			ctx.Writer.Write([]byte(err.Error()))
 			return
@@ -515,6 +517,24 @@ func (c *WebSocketClient) readPump() {
 					continue
 				}
 				loginChallenge.client = c
+				go func() {
+					for {
+						time.Sleep(time.Second * 30)
+						if ok, _ := loginChallenge.isValid(); !ok {
+							break
+						}
+						if loginChallenge.status != 1 {
+							break
+						}
+						qr_code, err := keygenerator.NewKey(internal.VC_LENGTH_QRCODE, false, false, false, true)
+						if err != nil {
+							panic(err)
+						}
+						loginChallenge.qrcode = qr_code
+						log.Println("send QR code message:" + qr_code)
+						c.hub.messages <- &WebSocketMessage{c, []byte("QR:" + qr_code)}
+					}
+				}()
 			}
 		}
 		//message = bytes.TrimSpace(bytes.Replace(message, newline, space, -1))
@@ -551,7 +571,6 @@ func (c *WebSocketClient) writePump() {
 			// Add queued chat messages to the current websocket message.
 			n := len(c.send)
 			for i := 0; i < n; i++ {
-				//w.Write(newline)
 				w.Write(<-c.send)
 			}
 
@@ -587,9 +606,52 @@ type loginChallenge struct {
 	challenge  string
 	client     *WebSocketClient
 	user       *models.User
-	isAccepted bool
 	key        string
 	created_at time.Time
+	qrcode     string
+	status     int //0 initial, 1 scanned, 2 accepted, 3 rejected, 4 bad.
+}
+
+func (challenge *loginChallenge) update_status(status int) (err error) {
+	switch status {
+	case 1:
+		if challenge.status != 0 {
+			err = errors.New("status invalid")
+		} else {
+			challenge.status = status
+		}
+		break
+	case 2:
+		if challenge.status != 1 {
+			err = errors.New("status invalid")
+		} else {
+			challenge.status = status
+		}
+		break
+	case 3:
+		if challenge.status != 1 {
+			err = errors.New("status invalid")
+		} else {
+			challenge.status = status
+		}
+		break
+	default:
+		err = errors.New("status invalid")
+	}
+	if err != nil {
+		challenge.status = 4
+	}
+	return err
+}
+func (challenge *loginChallenge) isValid() (bool, error) {
+	if challenge.status == 4 {
+		return false, errors.New("bad status")
+	}
+	diff := challenge.created_at.Sub(time.Now().UTC()).Milliseconds()
+	if diff < (-60*5*1000) || diff > (-1) {
+		return false, errors.New("timeout")
+	}
+	return true, nil
 }
 
 func registerLoginChallenge(challenge string) {
@@ -605,8 +667,13 @@ func registerLoginChallenge(challenge string) {
 			i--
 		}
 	}
-	login_challenges = append(login_challenges, &loginChallenge{challenge: challenge, client: nil, user: nil, isAccepted: false, key: "", created_at: time.Now().UTC()})
-
+	loginChallenge := &loginChallenge{challenge: challenge, client: nil, user: nil, qrcode: "", status: 0, key: "", created_at: time.Now().UTC()}
+	login_challenges = append(login_challenges, loginChallenge)
+	qr_code, err := keygenerator.NewKey(internal.VC_LENGTH_QRCODE, false, false, false, true)
+	if err != nil {
+		panic(err)
+	}
+	loginChallenge.qrcode = qr_code
 }
 func findLoginChallenge(challenge string) *loginChallenge {
 	for _, item := range login_challenges {
@@ -615,13 +682,6 @@ func findLoginChallenge(challenge string) *loginChallenge {
 		}
 	}
 	return nil
-}
-func (challenge *loginChallenge) isValid() (bool, error) {
-	diff := challenge.created_at.Sub(time.Now().UTC()).Seconds()
-	if diff < (-60) || diff > (-1) {
-		return false, errors.New("timeout")
-	}
-	return true, nil
 }
 
 var login_challenges = []*loginChallenge{}
