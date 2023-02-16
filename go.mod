@@ -4,7 +4,7 @@ go 1.16
 
 require (
 	github.com/boombuler/barcode v1.0.1
-	github.com/containerd/containerd v1.5.0 // indirect
+	github.com/containerd/containerd v1.5.18 // indirect
 	github.com/docker/docker v20.10.6+incompatible // indirect
 	github.com/docker/go-connections v0.4.0 // indirect
 	github.com/golang-migrate/migrate v3.5.4+incompatible
