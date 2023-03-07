@@ -14,7 +14,7 @@ require (
 	github.com/spf13/cobra v1.1.3
 	github.com/swishcloud/gostudy v0.0.0-20220416133912-4aab12987853
 	github.com/swishcloud/goweb v0.0.0-20220502132155-40593dfb737e
-	golang.org/x/net v0.0.0-20220421235706-1d1ef9303861 // indirect
+	golang.org/x/net v0.7.0 // indirect
 	golang.org/x/oauth2 v0.0.0-20210514164344-f6687ab2804c
 	gopkg.in/yaml.v2 v2.4.0
 )
