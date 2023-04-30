@@ -10,7 +10,7 @@ type Storage interface {
 	IncreaseLoginFailureNum(userId string)
 	UpdateUser()
 	UpdateUserVerificationCode(userId string, verification_code *string)
-	GetUsers()
+	GetUsers() []map[string]interface{}
 	GetUserByEmail(email string) *models.User
 	GetUserByName(name string) *models.User
 	GetUserById(name string) *models.User

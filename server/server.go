@@ -192,6 +192,7 @@ func (s *IDPServer) invalidateConsentSession(sub string, client *string) {
 }
 
 func (s *IDPServer) Serve() {
+	BindAdminHandler(s)
 	api_group := s.engine.Group()
 	api_group.Use(apiMiddleware(s))
 	api_group.GET(Path_User_Info, userInfoHandler(s))

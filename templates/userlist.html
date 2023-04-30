@@ -1,0 +1,49 @@
+{{define "content"}}
+<div class="container-fluid">
+    <div class="mb-3">
+        <button class="btn btn-primary">Add User</button>
+    </div>
+    <table class="table">
+        {{range .}}
+        <tr>
+            <th>
+                ID
+            </th>
+            <th>
+                Name
+            </th>
+            <th>
+                Email
+            </th>
+            <th>
+                Banned
+            </th>
+            <th>
+                Gender
+            </th>
+            <th>
+                Email Confirmed
+            </th>
+            <th>
+                Token Valid After
+            </th>
+            <th>
+                Role
+            </th>
+        </tr>
+        <tr>
+            <td>{{.id}}</td>
+            <td>{{.name}}</td>
+            <td>{{.email}}</td>
+            <td>{{.is_banned}}</td>
+            <td>{{.gender}}</td>
+            <td>{{.email_confirmed}}</td>
+            <td>{{.token_valid_after}}</td>
+            <td>{{.role}}</td>
+        </tr>
+        {{end}}
+    </table>
+</div>
+{{end}}
+{{define "scripts"}}
+{{end}}

@@ -66,7 +66,8 @@ func (m *SQLManager) UpdateUserVerificationCode(userId string, verification_code
 		panic("UpdateUserVerificationCode failed")
 	}
 }
-func (m *SQLManager) GetUsers() {
+func (m *SQLManager) GetUsers() []map[string]interface{} {
+	return m.Tx.ScanRows(`select * from public."user"`)
 }
 func (m *SQLManager) EmailValidate(email, code string) {
 	user := m.GetUserByEmail(email)

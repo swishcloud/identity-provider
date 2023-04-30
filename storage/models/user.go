@@ -18,6 +18,6 @@ type User struct {
 	Lock_timestamp                     *time.Time `json:"-"`
 }
 
-func (user User) isAdmin() bool {
+func (user User) IsAdmin() bool {
 	return user.Role == 2
 }

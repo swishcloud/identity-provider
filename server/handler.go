@@ -33,8 +33,25 @@ const (
 	Path_Profile            = "/profile"
 	Path_Password_Reset     = "/password_reset"
 	Path_Logout             = "/logout"
+	Path_User_List          = "/ulist"
 )
 
+func BindAdminHandler(s *IDPServer) {
+	adminGrp := s.engine.Group()
+	adminGrp.Use(adminMiddleware(s))
+	adminGrp.GET(Path_User_List, UserListHandler(s))
+}
+func adminMiddleware(s *IDPServer) goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		user, err := s.GetLoginUser(ctx)
+		if err != nil {
+			panic(err)
+		}
+		if !user.IsAdmin() {
+			panic("permissions denied")
+		}
+	}
+}
 func ApprovalNativeAppHandler(s *IDPServer) goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
 		ctx.RenderPage(s.newPageModel(ctx, ctx.Request.URL.Query().Get("code")), "templates/layout.html", "templates/approvalnativeapp.html")
@@ -362,6 +379,12 @@ func loginAcceptanceHandler(s *IDPServer) goweb.HandlerFunc {
 		if login_challenge.status == 2 {
 			s.wsHub.messages <- &WebSocketMessage{login_challenge.client, []byte(login_challenge.key)}
 		}
+	}
+}
+func UserListHandler(s *IDPServer) goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		users := s.GetStorage(ctx).GetUsers()
+		ctx.RenderPage(s.newPageModel(ctx, users), "templates/layout.html", "templates/userlist.html")
 	}
 }
 
