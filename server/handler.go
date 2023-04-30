@@ -280,6 +280,9 @@ func introspectToken(s *IDPServer, ctx *goweb.Context) (bool, *models.User, erro
 		iat := m["iat"].(float64)
 		iat_time := internal.TimestampToTime(iat)
 		user := s.GetStorage(ctx).GetUserById(sub)
+		if user == nil {
+			return false, nil, errors.New("not found user")
+		}
 		if iat_time.Before(user.Token_valid_after) {
 			isActive = false
 		}
