@@ -500,13 +500,10 @@ func (s *IDPServer) GetLoginUser(ctx *goweb.Context) (*models.User, error) {
 	if s, err := auth.GetSessionByToken(s.rac, ctx, s.oauth2_config, s.config.Introspect_Token_Url, s.skip_tls_verify); err != nil {
 		return nil, err
 	} else {
-		u := &models.User{}
-		u.Id = s.Claims["sub"].(string)
-		u.Name = s.Claims["name"].(string)
-		if avartar, ok := s.Claims["avatar"].(string); ok {
-			u.Avatar = &avartar
+		if u, ok := s.Data[session_user_key].(*models.User); ok {
+			return u, nil
 		}
-		return u, nil
+		return nil, errors.New("user not logged in")
 	}
 }
 

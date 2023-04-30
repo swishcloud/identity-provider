@@ -31,6 +31,8 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+const session_user_key = "session_user"
+
 type Config struct {
 	HYDRA_HOST               string       `yaml:"hydra_host"`
 	HYDRA_PUBLIC_PORT        string       `yaml:"hydra_public_port"`
@@ -327,7 +329,10 @@ func (s *IDPServer) Serve() {
 			ctx.Writer.Write([]byte(err.Error()))
 			return
 		}
-		auth.Login(ctx, token, global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_PUBLIC_PORT, jwk_json_path, nil), nil)
+		session := auth.Login(ctx, token, global.GetUriString(s.config.HYDRA_HOST, s.config.HYDRA_PUBLIC_PORT, jwk_json_path, nil), nil)
+		id := session.Claims["sub"].(string)
+		user := s.GetStorage(ctx).GetUserById(id)
+		session.Data[session_user_key] = user
 		http.Redirect(ctx.Writer, ctx.Request, "/", 302)
 	})
 	s.engine.GET("/logout", func(ctx *goweb.Context) {

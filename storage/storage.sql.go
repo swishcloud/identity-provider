@@ -103,9 +103,9 @@ func (m *SQLManager) ChangePassword(id string, newPassword string) {
 	}
 }
 func (m *SQLManager) getUser(where string, args ...interface{}) *models.User {
-	r := m.Tx.QueryRow("select id,name,email,password,avatar,email_confirmed,email_activation_code,verification_code,Verification_code_update_timestamp,token_valid_after,failure_num,lock_timestamp from public.\"user\" "+where, args...)
+	r := m.Tx.QueryRow("select id,name,email,password,avatar,email_confirmed,email_activation_code,verification_code,Verification_code_update_timestamp,token_valid_after,failure_num,lock_timestamp,role from public.\"user\" "+where, args...)
 	user := models.User{}
-	err := r.Scan(&user.Id, &user.Name, &user.Email, &user.Password, &user.Avatar, &user.Email_confirmed, &user.Email_activation_code, &user.Verification_code, &user.Verification_code_update_timestamp, &user.Token_valid_after, &user.Failure_num, &user.Lock_timestamp)
+	err := r.Scan(&user.Id, &user.Name, &user.Email, &user.Password, &user.Avatar, &user.Email_confirmed, &user.Email_activation_code, &user.Verification_code, &user.Verification_code_update_timestamp, &user.Token_valid_after, &user.Failure_num, &user.Lock_timestamp, &user.Role)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil
