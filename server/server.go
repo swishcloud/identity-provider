@@ -383,7 +383,8 @@ func (s *IDPServer) Serve() {
 		})
 	})
 	s.engine.GET(Api_Path_Introspect_Token, IntrospectTokenHandler(s))
-	log.Println("accepting tcp connections on https://" + s.config.LISTEN_ADDRESS)
+	log.Println("accepting tcp connections on " + s.config.LISTEN_ADDRESS)
+	log.Println("website address: https://" + s.config.Website_domain)
 	server := http.Server{
 		Addr:    s.config.LISTEN_ADDRESS,
 		Handler: s.engine,
