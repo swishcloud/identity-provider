@@ -11,18 +11,22 @@
                 <option value="2">Client credentials</option>
             </select>
         </div>
+        <div class="form-group d-none">
+            <label>Client id</label>
+            <input type="text" class="form-control" name="clientid" required>
+        </div>
         <div class="form-group">
             <label>Email address</label>
-            <input type="email" class="form-control" name="email">
+            <input type="email" class="form-control" name="email" required>
             <small class="form-text text-muted">We'll never share your email with anyone else.</small>
         </div>
         <div class="form-group">
             <label>User name</label>
-            <input type="text" class="form-control" name="username">
+            <input type="text" class="form-control" name="username" required>
         </div>
         <div class="form-group">
             <label>Password</label>
-            <input type="password" class="form-control" name="password">
+            <input type="password" class="form-control" name="password" required>
         </div>
         <button type="submit" class="btn btn-primary">Save</button>
     </form>
@@ -44,5 +48,16 @@
         }
     })
 
+
+    //switch user type
+    $("[name='userType']").on("change", function () {
+        if ($(this).val() == 1) {
+            $("[name='clientid']").parent(".form-group").addClass("d-none")
+            $("[name='email']").parent(".form-group").removeClass("d-none")
+        } else if ($(this).val() == 2) {
+            $("[name='clientid']").parent(".form-group").removeClass("d-none")
+            $("[name='email']").parent(".form-group").addClass("d-none")
+        }
+    })
 </script>
 {{end}}

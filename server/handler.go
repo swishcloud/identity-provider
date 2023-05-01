@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/swishcloud/gostudy/common"
 	"github.com/swishcloud/gostudy/keygenerator"
 	"github.com/swishcloud/identity-provider/global"
@@ -190,6 +191,9 @@ func RegisterHandler(s *IDPServer) goweb.HandlerFunc {
 			ctx.Failed("password and confirm password are inconsistent")
 			return
 		}
+		if len(username) < 1 {
+			panic("user name cannot be empty")
+		}
 		s.GetStorage(ctx).AddUser(username, password, email)
 		user := s.GetStorage(ctx).GetUserByName(username)
 		activateAddr := global.GetUriString(s.config.Website_domain, s.config.Website_port, Path_Email_Validate+"?email="+user.Email+"&code="+url.QueryEscape(*user.Email_activation_code), nil)
@@ -256,6 +260,9 @@ func LoginHandler(s *IDPServer) goweb.HandlerFunc {
 		//login_challenge = login_challenge[1 : 1+32]
 		account := ctx.Request.Form.Get("account")
 		password := ctx.Request.Form.Get("password")
+		if !s.skip_tls_verify && len(password) < 8 {
+			panic("your password length is less than 8.")
+		}
 		key := ctx.Request.Form.Get("key")
 		var user *models.User
 		var err error
@@ -399,9 +406,17 @@ func AddUserHandler(s *IDPServer) goweb.HandlerFunc {
 func AddUserPostHandler(s *IDPServer) goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
 		userType := ctx.Request.FormValue("userType") //usertype: 1, normal user; 2, client credentials
+		clientid := ctx.Request.FormValue("clientid")
 		email := ctx.Request.FormValue("email")
 		username := ctx.Request.FormValue("username")
 		password := ctx.Request.FormValue("password")
+		if len(username) < 1 {
+			panic("user name cannot be empty")
+		} else if user := s.GetStorage(ctx).GetUserByName(username); user != nil {
+			panic("a user with name " + username + " already exists")
+		} else if user := s.GetStorage(ctx).GetUserByEmail(email); user != nil {
+			panic("a user with email " + email + " already exists")
+		}
 		if t, err := strconv.ParseInt(userType, 10, 64); err != nil {
 			panic(err)
 		} else {
@@ -412,6 +427,10 @@ func AddUserPostHandler(s *IDPServer) goweb.HandlerFunc {
 				s.GetStorage(ctx).EmailValidate(user.Email, *user.Email_activation_code)
 			} else if t == 2 {
 				//add client credentials
+				if _, err := uuid.Parse(clientid); err != nil {
+					panic("the client id literal is not uuid")
+				}
+				s.GetStorage(ctx).AddClientCredentials(clientid, username, password)
 			} else {
 				panic("unsupported user type.")
 			}
