@@ -4,7 +4,7 @@ import "github.com/swishcloud/identity-provider/storage/models"
 
 type Storage interface {
 	AddUser(username, password, email string)
-	AddClientCredentials(clientid, name, password string)
+	AddClientCredentials(clientid, name, password, email string)
 	DeleteUser()
 	ZeroLoginFailureNum(userId string)
 	UpdateLockTimestamp(userId string)

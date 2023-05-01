@@ -430,7 +430,8 @@ func AddUserPostHandler(s *IDPServer) goweb.HandlerFunc {
 				if _, err := uuid.Parse(clientid); err != nil {
 					panic("the client id literal is not uuid")
 				}
-				s.GetStorage(ctx).AddClientCredentials(clientid, username, password)
+				email = clientid + "@e.com"
+				s.GetStorage(ctx).AddClientCredentials(clientid, username, password, email)
 			} else {
 				panic("unsupported user type.")
 			}
