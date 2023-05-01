@@ -1,6 +1,6 @@
 #!/bin/sh
 #set environments for develoption
-export GOBLOGAddr=http://$LOCAL_IP:8080 
+export GOBLOGAddr=https://$LOCAL_IP:8080 
 export IDENTITY_PROVIDER_ADDDR=https://$LOCAL_IP:11109
 export FILESYNC_WEB_ADDDR=https://$LOCAL_IP:2002
 export HydraAdminAddr=https://$LOCAL_IP:8009 
@@ -19,7 +19,7 @@ sudo docker run --rm -it \
  --grant-types authorization_code,refresh_token \
  --response-types token,code,id_token \
  --scope openid,offline,profile \
- --callbacks $GOBLOGAddr/callback \
+ --callbacks $GOBLOGAddr/login-callback \
  --post-logout-callbacks $GOBLOGAddr/login \
  --token-endpoint-auth-method client_secret_post
 

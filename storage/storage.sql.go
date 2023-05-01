@@ -45,7 +45,11 @@ func (m *SQLManager) AddUser(username, password, email string) {
 	hashedPwd := common.Md5Hash(password)
 	code, err := keygenerator.NewKey(50, false, false, false, true)
 	global.Panic(err)
-	m.Tx.MustExec("INSERT INTO public.\"user\"(id, name, email, password,insert_time,email_confirmed, email_activation_code,avatar,token_valid_after,failure_num) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,0)", uuid.New(), username, email, hashedPwd, time.Now().UTC(), 0, code, "", time.Now().UTC())
+	m.Tx.MustExec("INSERT INTO public.\"user\"(id, name, email, password,insert_time,email_confirmed, email_activation_code,avatar,token_valid_after,failure_num,role) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,0,1)", uuid.New(), username, email, hashedPwd, time.Now().UTC(), 0, code, "", time.Now().UTC())
+}
+func (m *SQLManager) AddClientCredentials(clientid, name, password, email string) {
+	hashedPwd := common.Md5Hash(password)
+	m.Tx.MustExec("INSERT INTO public.\"user\"(id, name,email,password,insert_time,email_confirmed,token_valid_after,failure_num,role) VALUES ($1,$2,$3,$4,$5,true,$6,0,1)", clientid, name, email, hashedPwd, time.Now().UTC(), time.Now().UTC())
 }
 func (m *SQLManager) DeleteUser() {
 }
