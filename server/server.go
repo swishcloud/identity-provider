@@ -87,7 +87,7 @@ func NewIDPServer(configPath string, skip_tls_verify bool) *IDPServer {
 		panic(err)
 	}
 	s.engine = goweb.Default()
-	s.engine.WM.HandlerWidget = &HandlerWidget{}
+	s.engine.WM.HandlerWidget = &HandlerWidget{s: s}
 	s.emailSender = email.EmailSender{UserName: s.config.Email.Smtp_username, Password: s.config.Email.Smtp_password, Addr: s.config.Email.Smtp_addr, Name: s.config.WEBSITE_NAME}
 	s.oauth2_config = &oauth2.Config{
 		ClientID:     "IDENTITY_PROVIDER",
@@ -396,12 +396,13 @@ func (s *IDPServer) Serve() {
 }
 
 type HandlerWidget struct {
+	s *IDPServer
 }
 
 func (*HandlerWidget) Pre_Process(ctx *goweb.Context) {
 	log.Println("incomming request:", ctx.Request.URL.Path)
 }
-func (*HandlerWidget) Post_Process(ctx *goweb.Context) {
+func (hw *HandlerWidget) Post_Process(ctx *goweb.Context) {
 	m := ctx.Data["storage"]
 	if m != nil {
 		m.(storage.Storage).Commit()
@@ -412,7 +413,12 @@ func (*HandlerWidget) Post_Process(ctx *goweb.Context) {
 		if strings.Contains(accept, "application/json") {
 			ctx.Failed(ctx.Err.Error())
 		} else {
-			ctx.Writer.Write([]byte(ctx.Err.Error()))
+			data := struct {
+				Desc string
+			}{Desc: ctx.Err.Error()}
+			model := hw.s.newPageModel(ctx, data)
+			model.PageTitle = "ERROR"
+			ctx.RenderPage(model, "templates/layout.html", "templates/error.html")
 		}
 	}
 }
