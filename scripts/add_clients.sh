@@ -58,7 +58,7 @@ sudo docker run --rm -it \
  --grant-types authorization_code,refresh_token \
  --response-types token,code,id_token \
  --scope openid,offline,profile \
- --callbacks $FILESYNC_WEB_ADDDR/login-callback,$IDENTITY_PROVIDER_ADDDR/.approvalnativeapp \
+ --callbacks $FILESYNC_WEB_ADDDR/login-callback \
  --post-logout-callbacks $FILESYNC_WEB_ADDDR \
  --token-endpoint-auth-method client_secret_post
 #create client FILESYNC_MOBILE
@@ -75,6 +75,7 @@ sudo docker run --rm -it \
  --grant-types authorization_code,refresh_token \
  --response-types token,code,id_token \
  --scope openid,offline,profile \
- --callbacks com.example.app:/logincallback \
+ --callbacks com.example.app:/logincallback,$IDENTITY_PROVIDER_ADDDR/.approvalnativeapp \
  --token-endpoint-auth-method none
  #--callbacks $IDENTITY_PROVIDER_ADDDR/.approvalnativeapp \
+sudo docker run --rm -it  -e HYDRA_ADMIN_URL=$HydraAdminAddr  oryd/hydra:v1.0.8 clients --skip-tls-verify list

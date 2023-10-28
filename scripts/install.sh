@@ -10,8 +10,10 @@ function detectError(){
     fi
 }
 #clean up
+set +e
 sudo docker rm -f ory-hydra
 sudo docker rm -f hydra-postgres
+set -e
 #set up and run database for hydra
 sudo docker compose -p identity-provider-project -f docker-compose-postgres-hydra.yaml up -d
 echo sleep 5 seconds for waiting brand-new database to run
