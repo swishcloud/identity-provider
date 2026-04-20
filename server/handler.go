@@ -470,6 +470,7 @@ func introspectTokenMiddleware(s *IDPServer) goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
 		if s, err := auth.GetSessionByToken(s.rac, ctx, s.oauth2_config, s.config.Introspect_Token_Url, s.skip_tls_verify); err != nil {
 			http.Redirect(ctx.Writer, ctx.Request, "/login", http.StatusFound)
+			ctx.Abort()
 		} else {
 			u := &models.User{}
 			u.Id = s.Claims["sub"].(string)
