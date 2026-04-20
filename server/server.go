@@ -2,6 +2,7 @@ package server
 
 import (
 	"crypto/tls"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -23,6 +24,7 @@ import (
 	"github.com/swishcloud/gostudy/keygenerator"
 	"github.com/swishcloud/goweb"
 	"github.com/swishcloud/goweb/auth"
+	goweblog "github.com/swishcloud/goweb/log"
 	"github.com/swishcloud/identity-provider/global"
 	"github.com/swishcloud/identity-provider/internal"
 	"github.com/swishcloud/identity-provider/storage"
@@ -41,6 +43,7 @@ type Config struct {
 	WEBSITE_NAME             string       `yaml:"website_name"`
 	SECRET                   string       `yaml:"secret"`
 	DB_CONN_INFO             string       `yaml:"db_conn_info"`
+	LOG_DB_CONN_INFO         string       `yaml:"log_db_conn_info"`
 	Post_Logout_Redirect_Uri string       `yaml:"post_logout_redirect_uri"`
 	Introspect_Token_Url     string       `yaml:"introspect_token_url"`
 	Email                    Config_email `yaml:"email"`
@@ -192,6 +195,13 @@ func (s *IDPServer) invalidateConsentSession(sub string, client *string) {
 }
 
 func (s *IDPServer) Serve() {
+	db, _ := sql.Open("postgres", s.config.LOG_DB_CONN_INFO)
+	if err := goweblog.InitDB(db); err != nil {
+		log.Fatal(err)
+	}
+	s.engine.Use(goweblog.NewLoggingMiddleware(s.config.Website_domain, goweblog.NewDatabaseLogger(db)).Handler)
+	s.engine.Use(goweb.CompressionMiddleware)
+	s.engine.Use(s.ErrorMiddleware)
 	BindAdminHandler(s)
 	api_group := s.engine.Group()
 	api_group.Use(apiMiddleware(s))
@@ -264,9 +274,6 @@ func (s *IDPServer) Serve() {
 	s.engine.GET(Path_Register_Succeeded, RegisterSucceededHandler(s))
 	s.engine.GET(Path_Change_Password, ChangePasswordHandler(s))
 	s.engine.POST(Path_Change_Password, ChangePasswordHandler(s))
-	s.engine.GET("/ws", func(ctx *goweb.Context) {
-		serveWs(s.wsHub, ctx.Writer.ResponseWriter, ctx.Request)
-	})
 	s.engine.GET("/login", func(ctx *goweb.Context) {
 		login_challenge := ctx.Request.URL.Query().Get("login_challenge")
 		if login_challenge == "" {
@@ -407,20 +414,24 @@ func (hw *HandlerWidget) Post_Process(ctx *goweb.Context) {
 	if m != nil {
 		m.(storage.Storage).Commit()
 	}
+}
 
-	if ctx.Err != nil {
-		accept := ctx.Request.Header.Get("Accept")
-		if strings.Contains(accept, "application/json") {
-			ctx.Failed(ctx.Err.Error())
-		} else {
-			data := struct {
-				Desc string
-			}{Desc: ctx.Err.Error()}
-			model := hw.s.newPageModel(ctx, data)
-			model.PageTitle = "ERROR"
-			ctx.RenderPage(model, "templates/layout.html", "templates/error.html")
+func (s *IDPServer) ErrorMiddleware(ctx *goweb.Context) {
+	defer func() {
+		if err := recover(); err != nil {
+			desc := fmt.Sprintf("%s", err)
+			if ctx.Request.Method == http.MethodPost {
+				ctx.Failed(desc)
+			} else {
+				data := struct {
+					Desc string
+				}{desc}
+				model := s.newPageModel(ctx, data)
+				ctx.RenderPage(model, "templates/layout.html", "templates/error.html")
+			}
 		}
-	}
+	}()
+	ctx.Next()
 }
 
 type WebSocketMessage struct {

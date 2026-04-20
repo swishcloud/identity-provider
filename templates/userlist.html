@@ -7,7 +7,6 @@
         </button>
     </div>
     <table class="table">
-        {{range .}}
         <tr>
             <th>
                 ID
@@ -34,6 +33,7 @@
                 Role
             </th>
         </tr>
+        {{range .}}
         <tr>
             <td>{{.id}}</td>
             <td>{{.name}}</td>
